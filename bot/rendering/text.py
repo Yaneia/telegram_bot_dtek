@@ -158,25 +158,24 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
 
     lines.append("")
 
-    # 2. Table Column Headers (<= 28 chars, 2-line time column frees space for location names)
+    # 2. Table Column Headers (<= 28 chars, single-line HH:MM-HH:MM without СТАН column)
     if single_mode:
-        lines.append("ЧАС   │ СТАН")
-        lines.append("──────┼─────────────────────")
+        lines.append("ЧАС         │ СТАН")
+        lines.append("────────────┼─────────────")
     else:
         name_a = alias_a or "СЛ1"
         name_b = alias_b or "СЛ2"
-        # 28 - 6 (time) - 6 (separators ' │ ' * 2) = 16 chars available for both names
-        if len(name_a) + len(name_b) > 16:
-            hdr_a = name_a[:8]
-            hdr_b = name_b[: max(1, 16 - len(hdr_a))]
+        if len(name_a) + len(name_b) > 11:
+            hdr_a = name_a[:5]
+            hdr_b = name_b[: max(1, 11 - len(hdr_a))]
         else:
             hdr_a, hdr_b = name_a, name_b
         col_w_a = max(2, len(hdr_a))
         col_w_b = max(2, len(hdr_b))
         hdr_a = hdr_a.center(col_w_a)
         hdr_b = hdr_b.center(col_w_b)
-        lines.append(f"ЧАС   │ {hdr_a} │ {hdr_b}")
-        lines.append(f"{'─' * 6}┼{'─' * (col_w_a + 2)}┼{'─' * (col_w_b + 1)}")
+        lines.append(f"ЧАС         │ {hdr_a} │ {hdr_b}")
+        lines.append(f"{'─' * 12}┼{'─' * (col_w_a + 2)}┼{'─' * (col_w_b + 1)}")
 
     # 3. Contiguous Time Window Aggregation (30-min precision HH:MM-HH:MM)
     i = 0
@@ -211,15 +210,14 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
         else:
             chunk_end = f"{j//2:02d}:{(j%2)*30:02d}"
 
+        time_range = f"{chunk_start}-{chunk_end}"
         if single_mode:
             badge = _get_joint_badge(joint_state, alias_a, alias_b, single_mode)
-            lines.append(f"{chunk_start}-│ {badge}")
-            lines.append(f"{chunk_end} │")
+            lines.append(f"{time_range:11s} │ {badge}")
         else:
             ea = _pad_emoji_cell(EMOJI_SLOT_MAP.get(sa, "⬜"), col_w_a)
             eb = _pad_emoji_cell(EMOJI_SLOT_MAP.get(sb, "⬜") if sb else "⬜", col_w_b)
-            lines.append(f"{chunk_start}-│ {ea} │ {eb}".rstrip())
-            lines.append(f"{chunk_end} │ {' ' * col_w_a} │".rstrip())
+            lines.append(f"{time_range:11s} │ {ea} │ {eb}".rstrip())
         i = j
 
     # 4. Summary Statistics Section
