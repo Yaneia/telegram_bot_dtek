@@ -164,6 +164,29 @@ async def cb_refresh_schedule(
         await cmd_status(msg, db=db, user_id=user_id, **kwargs)
 
 
+@router.callback_query(F.data.startswith("status_date:"))
+async def cb_status_date(
+    query: Any,
+    db: Optional[DatabaseRepository] = None,
+    **kwargs: Any,
+) -> None:
+    """Switch between today's and tomorrow's schedule in /status."""
+    data = getattr(query, "data", "") or ""
+    date_arg = data.split(":", 1)[1] if ":" in data else "today"
+    target_date = None if date_arg == "today" else date_arg
+
+    if hasattr(query, "answer"):
+        try:
+            await query.answer("Завантаження графіка... 📅")
+        except Exception:
+            pass
+
+    user_id, _, _, _, _, _ = resolve_chat_scope(query)
+    msg = getattr(query, "message", None)
+    if msg:
+        await cmd_status(msg, db=db, user_id=user_id, target_date=target_date, **kwargs)
+
+
 @router.callback_query(F.data == "toggle_render_mode")
 async def cb_toggle_render_mode(
     query: Any,

@@ -9,7 +9,7 @@ Supports Aiogram 3.15+ with graceful standard library fallback stubs.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -276,6 +276,7 @@ async def cmd_status(
     scraper: Optional[ScraperCascade] = None,
     bot: Optional[Any] = None,
     user_id: Optional[int] = None,
+    target_date: Optional[str] = None,
     **kwargs: Any,
 ) -> None:
     """
@@ -310,17 +311,24 @@ async def cmd_status(
     slot2 = slots[1] if len(slots) > 1 else None
 
     # Fetch daily schedules via 5-tier cascade
-    sched1 = await scraper.get_schedule(region=slot1.region_code, group=slot1.subgroup_id)
-    sched2 = await scraper.get_schedule(region=slot2.region_code, group=slot2.subgroup_id) if slot2 else None
+    now = datetime.now(KYIV_TZ)
+    tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    sched1 = await scraper.get_schedule(region=slot1.region_code, group=slot1.subgroup_id, target_date=target_date)
+    sched2 = await scraper.get_schedule(region=slot2.region_code, group=slot2.subgroup_id, target_date=target_date) if slot2 else None
+
+    avail1 = getattr(sched1, "available_dates", None) or []
+    avail2 = getattr(sched2, "available_dates", None) or [] if sched2 else []
+    has_tomorrow = (tomorrow_str in avail1) or (tomorrow_str in avail2)
 
     # Evaluate comparison
-    now = datetime.now(KYIV_TZ)
     comparison = ComparisonEngine.compare(
         slot1=sched1,
         slot2=sched2,
         alias_a=slot1.alias,
         alias_b=slot2.alias if slot2 else None,
         now=now,
+        date=target_date,
     )
 
     # Encode TMA URL fragment
@@ -342,7 +350,14 @@ async def cmd_status(
 
     # Determine render mode (image vs text)
     current_mode = USER_RENDER_MODES.get(user_id, settings.DEFAULT_RENDER_MODE)
-    keyboard = build_status_keyboard(tma_url=tma_url, current_mode=current_mode, is_group=is_group)
+    keyboard = build_status_keyboard(
+        tma_url=tma_url,
+        current_mode=current_mode,
+        is_group=is_group,
+        target_date=target_date,
+        has_tomorrow=has_tomorrow,
+        tomorrow_str=tomorrow_str,
+    )
 
     if current_mode == "image":
         try:

@@ -171,6 +171,7 @@ class DailySchedule(_BaseClass):
     schedule_hash: Optional[str] = Field(default=None)
     hash: Optional[str] = Field(default=None)
     updated_at: Optional[str] = Field(default=None)
+    available_dates: List[str] = Field(default_factory=list)
 
     def __init__(self, **data: Any) -> None:
         if "region" in data and isinstance(data["region"], str):
@@ -284,6 +285,7 @@ class RegionalScheduleResponse(_BaseClass):
     emergency_message: Optional[str] = Field(default=None)
     data_source: str = Field(default="mock", description="direct_scrape, github_mirror, yasno_api, cache, mock")
     stale: bool = Field(default=False)
+    available_dates: List[str] = Field(default_factory=list)
     groups: Dict[str, SubgroupSchedule] = Field(...)
 
     def __init__(self, **data: Any) -> None:

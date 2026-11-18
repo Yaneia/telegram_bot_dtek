@@ -313,7 +313,11 @@ class ScraperCascade:
             groups=groups,
         )
 
-    async def _fetch_tier2_mirror(self, region: Union[DSORegion, str]) -> RegionalScheduleResponse:
+    async def _fetch_tier2_mirror(
+        self,
+        region: Union[DSORegion, str],
+        target_date: Optional[str] = None,
+    ) -> RegionalScheduleResponse:
         """Tier 2: Community GitHub raw mirror via httpx (timeout 4.0s)."""
         reg_str = self._normalize_region_str(region)
         try:
@@ -358,7 +362,9 @@ class ScraperCascade:
         # Handle Baskerville42 schedule dictionary (either `schedule` or `fact.data.<ts>` / `preset.data`)
         now_dt = datetime.now(KYIV_TZ)
         today_str = now_dt.strftime("%Y-%m-%d")
+        desired_date = target_date or today_str
         groups: Dict[str, SubgroupSchedule] = {}
+        available_dates: List[str] = []
 
         sched_obj: Dict[str, Any] = {}
         if isinstance(data, dict):
@@ -368,25 +374,28 @@ class ScraperCascade:
                 fact_block = data.get("fact") if isinstance(data.get("fact"), dict) else {}
                 fact_data = fact_block.get("data") if isinstance(fact_block.get("data"), dict) else {}
                 if fact_data:
-                    today_ts = str(fact_block.get("today", ""))
-                    if today_ts in fact_data and isinstance(fact_data[today_ts], dict):
-                        day_key = today_ts
-                    else:
-                        # Prefer key matching today's Kyiv date, otherwise first available day
-                        day_key = next(iter(fact_data.keys()))
-                        for k in fact_data.keys():
-                            try:
-                                if datetime.fromtimestamp(int(k), tz=KYIV_TZ).strftime("%Y-%m-%d") == today_str:
-                                    day_key = k
-                                    break
-                            except (ValueError, TypeError, OSError):
-                                continue
+                    ts_to_date: Dict[str, str] = {}
+                    for k in fact_data.keys():
+                        try:
+                            d_str = datetime.fromtimestamp(int(k), tz=KYIV_TZ).strftime("%Y-%m-%d")
+                            ts_to_date[k] = d_str
+                            if d_str not in available_dates:
+                                available_dates.append(d_str)
+                        except (ValueError, TypeError, OSError):
+                            continue
+
+                    day_key = None
+                    for k, d_str in ts_to_date.items():
+                        if d_str == desired_date:
+                            day_key = k
+                            break
+                    if day_key is None:
+                        today_ts = str(fact_block.get("today", ""))
+                        day_key = today_ts if today_ts in fact_data else next(iter(fact_data.keys()))
+
                     if isinstance(fact_data.get(day_key), dict):
                         sched_obj = fact_data[day_key]
-                        try:
-                            today_str = datetime.fromtimestamp(int(day_key), tz=KYIV_TZ).strftime("%Y-%m-%d")
-                        except (ValueError, TypeError, OSError):
-                            pass
+                        today_str = ts_to_date.get(day_key, today_str)
                 elif isinstance(data.get("preset"), dict) and isinstance(data["preset"].get("data"), dict):
                     preset_data = data["preset"]["data"]
                     first_preset = next(iter(preset_data.values()), None)
@@ -421,6 +430,7 @@ class ScraperCascade:
             emergency_message=data.get("emergency_message") if isinstance(data, dict) else None,
             data_source="github_mirror",
             stale=False,
+            available_dates=available_dates,
             groups=groups,
         )
 
@@ -594,6 +604,7 @@ class ScraperCascade:
         self,
         region: Union[DSORegion, str],
         group: Optional[str] = None,
+        target_date: Optional[str] = None,
     ) -> Union[RegionalScheduleResponse, DailySchedule, Dict[str, Any]]:
         """
         Execute 5-Tier Fallback Cascade to retrieve schedule.
@@ -618,7 +629,10 @@ class ScraperCascade:
         if resp is None:
             try:
                 logger.info("Attempting Tier 2 (GitHub mirror) for %s", reg_str)
-                resp = await self._fetch_tier2_mirror(reg_str)
+                if target_date is not None:
+                    resp = await self._fetch_tier2_mirror(reg_str, target_date=target_date)
+                else:
+                    resp = await self._fetch_tier2_mirror(reg_str)
                 await self._save_to_cache(reg_str, resp)
             except Exception as e:
                 logger.warning("Tier 2 failed for %s: %s", reg_str, e)
@@ -735,6 +749,9 @@ class ScraperCascade:
         updated_at = getattr(resp, "updated_at", None) or (
             resp.get("updated_at") if isinstance(resp, dict) else None
         )
+        available_dates = getattr(resp, "available_dates", None) or (
+            resp.get("available_dates", []) if isinstance(resp, dict) else []
+        )
 
         h = hashlib.sha256("".join(s.status.value for s in intervals).encode("utf-8")).hexdigest()
 
@@ -753,6 +770,7 @@ class ScraperCascade:
             schedule_hash=h,
             hash=h,
             updated_at=str(updated_at) if updated_at else None,
+            available_dates=list(available_dates) if available_dates else [],
         )
         daily.data_source = str(data_source)
         daily.stale = bool(is_stale)

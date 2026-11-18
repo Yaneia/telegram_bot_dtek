@@ -58,7 +58,14 @@ def _tma_button(text: str, tma_url: str, is_group: bool = False) -> InlineKeyboa
     return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=tma_url))
 
 
-def build_status_keyboard(tma_url: str, current_mode: str = "image", is_group: bool = False) -> InlineKeyboardMarkup:
+def build_status_keyboard(
+    tma_url: str,
+    current_mode: str = "image",
+    is_group: bool = False,
+    target_date: Optional[str] = None,
+    has_tomorrow: bool = False,
+    tomorrow_str: Optional[str] = None,
+) -> InlineKeyboardMarkup:
     """Build timeline presentation keyboard with TMA WebAppInfo button and actions."""
     toggle_text = "📝 Текстовий режим" if current_mode == "image" else "🖼 Графічний режим"
 
@@ -66,15 +73,27 @@ def build_status_keyboard(tma_url: str, current_mode: str = "image", is_group: b
         [
             _tma_button("📱 Відкрити інтерактивний графік (TMA)", tma_url, is_group=is_group)
         ],
+    ]
+    if has_tomorrow and tomorrow_str:
+        if target_date == tomorrow_str:
+            keyboard.append([
+                InlineKeyboardButton(text="📅 Графік на сьогодні", callback_data="status_date:today"),
+            ])
+        else:
+            keyboard.append([
+                InlineKeyboardButton(text="📅 Графік на завтра", callback_data=f"status_date:{tomorrow_str}"),
+            ])
+    refresh_cb = f"status_date:{target_date}" if target_date else "refresh_schedule"
+    keyboard.extend([
         [
-            InlineKeyboardButton(text="🔄 Оновити", callback_data="refresh_schedule"),
+            InlineKeyboardButton(text="🔄 Оновити", callback_data=refresh_cb),
             InlineKeyboardButton(text=toggle_text, callback_data="toggle_render_mode"),
         ],
         [
             InlineKeyboardButton(text="📍 Мої черги", callback_data="menu_slots"),
             InlineKeyboardButton(text="⚙️ Налаштування", callback_data="menu_settings"),
         ],
-    ]
+    ])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
