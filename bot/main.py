@@ -23,6 +23,7 @@ from bot.database.connection import DatabaseConnectionManager
 from bot.database.repository import DatabaseRepository
 from bot.database.schema import init_db
 from bot.handlers import setup_routers
+from bot.services.notifier import NotifierService
 from bot.services.scraper import ScraperCascade
 
 logger = logging.getLogger("bot.main")
@@ -100,6 +101,7 @@ class BotApplication:
         self.db_manager: Optional[DatabaseConnectionManager] = None
         self.db_repo: Optional[DatabaseRepository] = None
         self.scraper: Optional[ScraperCascade] = None
+        self.notifier: Optional[NotifierService] = None
         self.bot: Optional[Bot] = None
         self.dp: Optional[Dispatcher] = None
         self.heartbeat_task: Optional[asyncio.Task] = None
@@ -133,6 +135,14 @@ class BotApplication:
         root_router = setup_routers()
         self.dp.include_router(root_router)
 
+        self.notifier = NotifierService(
+            bot=self.bot,
+            db=self.db_repo,
+            scraper=self.scraper,
+            check_interval=self.settings.NOTIFICATION_CHECK_INTERVAL_SECONDS,
+            scrape_interval=self.settings.SCRAPE_INTERVAL_SECONDS,
+        )
+
         # Write initial heartbeat
         touch_heartbeat(self.settings.HEARTBEAT_PATH)
 
@@ -144,6 +154,8 @@ class BotApplication:
         self.heartbeat_task = asyncio.create_task(
             heartbeat_loop(self.settings.HEARTBEAT_PATH, interval_seconds=30)
         )
+        if self.notifier is not None:
+            await self.notifier.start()
 
         logger.info(
             "Starting Telegram bot '%s' with outbound long-polling (zero open ports)...",
@@ -172,6 +184,9 @@ class BotApplication:
     async def shutdown(self) -> None:
         """Gracefully release all resources, sessions, and connections."""
         logger.info("Initiating graceful bot shutdown...")
+
+        if self.notifier is not None:
+            await self.notifier.stop()
 
         if self.heartbeat_task and not self.heartbeat_task.done():
             self.heartbeat_task.cancel()

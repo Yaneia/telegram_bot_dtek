@@ -472,8 +472,8 @@
         try {
           tg.ready();
           tg.expand();
-          if (typeof tg.enableClosingConfirmation === 'function') {
-            tg.enableClosingConfirmation();
+          if (typeof tg.disableClosingConfirmation === 'function') {
+            tg.disableClosingConfirmation();
           }
           if (tg.colorScheme) {
             document.documentElement.className = tg.colorScheme;

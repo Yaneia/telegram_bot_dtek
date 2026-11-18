@@ -251,6 +251,7 @@ class NotifierService:
         scraper: Optional[Any] = None,
         rate_limiter: Optional[TokenBucketRateLimiter] = None,
         check_interval: int = 60,
+        scrape_interval: int = 600,
         db_repo: Optional[Any] = None,
     ) -> None:
         self.bot = bot
@@ -258,9 +259,11 @@ class NotifierService:
         self.scraper = scraper
         self.rate_limiter = rate_limiter or TokenBucketRateLimiter()
         self.check_interval = check_interval
+        self.scrape_interval = scrape_interval
         self._running = False
         self._task: Optional[asyncio.Task] = None
         self._cached_slots_cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._last_diff_check_at: Optional[datetime] = None
 
     async def start(self) -> None:
         """Start the continuous background polling loop."""
@@ -309,7 +312,14 @@ class NotifierService:
         self._cached_slots_cache.clear()
 
         sent_warnings = await self.check_advance_warnings(current_time)
-        sent_diffs = await self.check_schedule_diffs(current_time)
+        sent_diffs = 0
+        if (
+            self._last_diff_check_at is None
+            or self.scrape_interval <= 0
+            or (current_time - self._last_diff_check_at).total_seconds() >= self.scrape_interval
+        ):
+            sent_diffs = await self.check_schedule_diffs(current_time)
+            self._last_diff_check_at = current_time
         return sent_warnings + sent_diffs
 
     async def _execute_query(self, sql: str, params: tuple = ()) -> List[Any]:
