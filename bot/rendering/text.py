@@ -51,36 +51,44 @@ def _get_joint_badge(
     alias_a: str,
     alias_b: str,
     single_mode: bool,
-    alias_limit: int = 4,
+    alias_limit: int = 16,
 ) -> str:
-    """Get authoritative compact badge representation for table row and current status."""
+    """Get badge representation for table row and current status."""
     a_short = (alias_a[:alias_limit] if alias_a else "СЛ1")
     b_short = (alias_b[:alias_limit] if alias_b else "СЛ2")
 
     if single_mode:
         if joint_str == "ON":
-            return "🟩Світло є"
+            return "🟩 Світло є"
         elif joint_str == "OFF":
-            return "⬛Відключення"
+            return "⬛ Відключення"
         elif joint_str == "MAYBE":
-            return "🟨Можливе"
+            return "🟨 Можливе"
         elif joint_str == "EMERGENCY":
-            return "🚨Аварія"
-        return f"⚪{joint_str[:6]}"
+            return "🚨 Аварія"
+        return f"⚪ {joint_str}"
 
     badge_map: Dict[str, str] = {
-        "BOTH_ON": "🟢Всюди",
-        "GROUP1_ONLY": f"🔵{a_short}",
-        "GROUP2_ONLY": f"🟣{b_short}",
-        "BOTH_OFF": "Відключення" if alias_limit <= 4 else "⬛Відключення",
-        "GROUP1_ON_GROUP2_MAYBE": "🟢Є/Мож",
-        "GROUP1_MAYBE_GROUP2_ON": "🟣Мож/Є",
-        "GROUP1_OFF_GROUP2_MAYBE": "⬛Ні/Мож",
-        "GROUP1_MAYBE_GROUP2_OFF": "⬛Мож/Ні",
-        "BOTH_MAYBE": "🟨Сіра",
-        "EMERGENCY": "🚨Аварія",
+        "BOTH_ON": "🟢 Всюди",
+        "GROUP1_ONLY": f"🔵 {a_short}",
+        "GROUP2_ONLY": f"🟣 {b_short}",
+        "BOTH_OFF": "⬛ Відключення",
+        "GROUP1_ON_GROUP2_MAYBE": "🟢 Є / 🟨 Мож.",
+        "GROUP1_MAYBE_GROUP2_ON": "🟨 Мож. / 🟢 Є",
+        "GROUP1_OFF_GROUP2_MAYBE": "⬛ Ні / 🟨 Мож.",
+        "GROUP1_MAYBE_GROUP2_OFF": "🟨 Мож. / ⬛ Ні",
+        "BOTH_MAYBE": "🟨 Сіра зона",
+        "EMERGENCY": "🚨 Аварія",
     }
-    return badge_map.get(joint_str, f"⚪{joint_str[:4]}")
+    return badge_map.get(joint_str, f"⚪ {joint_str}")
+
+
+def _pad_emoji_cell(emoji: str, col_width: int) -> str:
+    """Center a 2-column-wide emoji inside a col_width monospace cell."""
+    pad_total = max(0, col_width - 2)
+    left = pad_total // 2
+    right = pad_total - left
+    return f"{' ' * left}{emoji}{' ' * right}"
 
 
 def _uk_plural(n: int, form1: str, form2_4: str, form5: str) -> str:
@@ -138,10 +146,10 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
     updated_at = _extract_field(timeline_data, "updated_at")
     lines.append(f"⚡️ ДТЕК: {comp_date}")
     if updated_at:
-        lines.append(f"🕒 Оновл.: {str(updated_at)[:17]}")
-    lines.append(f"🏠 {subgrp_a or '1'}: {alias_a[:18]}")
+        lines.append(f"🕒 Оновлено: {updated_at}")
+    lines.append(f"🏠 {subgrp_a or '1'}: {alias_a}")
     if not single_mode:
-        lines.append(f"🏢 {subgrp_b or '2'}: {alias_b[:18]}")
+        lines.append(f"🏢 {subgrp_b or '2'}: {alias_b}")
 
     if is_emergency:
         lines.append("🚨 АВАРІЙНІ ВІДКЛЮЧЕННЯ")
@@ -150,15 +158,19 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
 
     lines.append("")
 
-    # 2. Table Column Headers
+    # 2. Table Column Headers (full names, no truncation)
     if single_mode:
         lines.append("ЧАС         │ СТАН")
-        lines.append("────────────┼─────")
+        lines.append("────────────┼─────────────")
     else:
-        hdr_a = (subgrp_a[:3] if subgrp_a else alias_a[:3] or "СЛ1").center(3)
-        hdr_b = (subgrp_b[:3] if subgrp_b else alias_b[:3] or "СЛ2").center(3)
-        lines.append(f"ЧАС        │{hdr_a}│{hdr_b}│СТАН")
-        lines.append("───────────┼───┼───┼─────")
+        name_a = alias_a or "Слот 1"
+        name_b = alias_b or "Слот 2"
+        col_w_a = max(4, len(name_a))
+        col_w_b = max(4, len(name_b))
+        hdr_a = name_a.center(col_w_a)
+        hdr_b = name_b.center(col_w_b)
+        lines.append(f"ЧАС         │ {hdr_a} │ {hdr_b} │ СТАН")
+        lines.append(f"{'─' * 12}┼{'─' * (col_w_a + 2)}┼{'─' * (col_w_b + 2)}┼{'─' * 14}")
 
     # 3. Contiguous Time Window Aggregation (30-min precision HH:MM-HH:MM)
     i = 0
@@ -199,9 +211,9 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
         if single_mode:
             row = f"{time_range:11s} │ {badge}"
         else:
-            ea = EMOJI_SLOT_MAP.get(sa, "⬜")
-            eb = EMOJI_SLOT_MAP.get(sb, "⬜") if sb else "⬜"
-            row = f"{time_range:11s}│{ea}│{eb}│{badge}"
+            ea = _pad_emoji_cell(EMOJI_SLOT_MAP.get(sa, "⬜"), col_w_a)
+            eb = _pad_emoji_cell(EMOJI_SLOT_MAP.get(sb, "⬜") if sb else "⬜", col_w_b)
+            row = f"{time_range:11s} │ {ea} │ {eb} │ {badge}"
 
         lines.append(row)
         i = j
@@ -220,15 +232,15 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
         lines.append(f"• 🟢 Світло є: {g1_only_h} год")
         lines.append(f"• ⬛ Відключення: {both_off_h} год")
         if _safe_float(uncertain_h) > 0:
-            lines.append(f"• 🟨 Сіра: {uncertain_h} год")
+            lines.append(f"• 🟨 Сіра зона: {uncertain_h} год")
     else:
         if show_joint:
             lines.append(f"• 🟢 Всюди: {both_on_h} год")
-            lines.append(f"• 🔵 {alias_a[:11]}: {g1_only_h} год")
-            lines.append(f"• 🟣 {alias_b[:11]}: {g2_only_h} год")
+            lines.append(f"• 🔵 {alias_a}: {g1_only_h} год")
+            lines.append(f"• 🟣 {alias_b}: {g2_only_h} год")
         lines.append(f"• ⬛ Відключення: {both_off_h} год")
         if _safe_float(uncertain_h) > 0:
-            lines.append(f"• 🟨 Сіра: {uncertain_h} год")
+            lines.append(f"• 🟨 Сіра зона: {uncertain_h} год")
 
     # 5. Now Indicator and Countdown
     lines.append("")
@@ -241,25 +253,16 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
 
     if min_to_trans is not None and next_trans_time:
         dur_text = format_duration_uk(int(min_to_trans))
-        header_line = f"⏳ До зміни ({next_trans_time}):"
-        if len(header_line) <= 28 and len(f"  {dur_text}") <= 28:
-            lines.append(header_line)
-            lines.append(f"  {dur_text}")
-        else:
-            lines.append(f"⏳ До зміни ({next_trans_time}):")
-            lines.append(dur_text)
+        lines.append(f"⏳ До зміни ({next_trans_time}): {dur_text}")
     elif min_to_trans is not None:
         dur_text = format_duration_uk(int(min_to_trans))
-        lines.append("⏳ До зміни:")
-        lines.append(f"  {dur_text}")
+        lines.append(f"⏳ До зміни: {dur_text}")
     elif next_trans_time:
         lines.append(f"⏳ До зміни: {next_trans_time}")
     else:
         lines.append("⏳ До зміни: —")
 
-    # Final Invariant Enforcement: Every single line must be <= 28 characters
-    clamped_lines = [line[:28] for line in lines]
-    return "\n".join(clamped_lines)
+    return "\n".join(lines)
 
 
 class TextRenderer:
