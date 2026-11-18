@@ -51,36 +51,36 @@ def _get_joint_badge(
     alias_a: str,
     alias_b: str,
     single_mode: bool,
-    alias_limit: int = 16,
+    alias_limit: int = 10,
 ) -> str:
-    """Get badge representation for table row and current status."""
+    """Get compact badge representation for table row and current status (fits <= 28 chars)."""
     a_short = (alias_a[:alias_limit] if alias_a else "СЛ1")
     b_short = (alias_b[:alias_limit] if alias_b else "СЛ2")
 
     if single_mode:
         if joint_str == "ON":
-            return "🟩 Світло є"
+            return "🟩Світло є"
         elif joint_str == "OFF":
-            return "⬛ Відключення"
+            return "⬛Відключення"
         elif joint_str == "MAYBE":
-            return "🟨 Можливе"
+            return "🟨Можливе"
         elif joint_str == "EMERGENCY":
-            return "🚨 Аварія"
-        return f"⚪ {joint_str}"
+            return "🚨Аварія"
+        return f"⚪{joint_str[:6]}"
 
     badge_map: Dict[str, str] = {
-        "BOTH_ON": "🟢 Всюди",
-        "GROUP1_ONLY": f"🔵 {a_short}",
-        "GROUP2_ONLY": f"🟣 {b_short}",
-        "BOTH_OFF": "⬛ Відключення",
-        "GROUP1_ON_GROUP2_MAYBE": "🟢 Є / 🟨 Мож.",
-        "GROUP1_MAYBE_GROUP2_ON": "🟨 Мож. / 🟢 Є",
-        "GROUP1_OFF_GROUP2_MAYBE": "⬛ Ні / 🟨 Мож.",
-        "GROUP1_MAYBE_GROUP2_OFF": "🟨 Мож. / ⬛ Ні",
-        "BOTH_MAYBE": "🟨 Сіра зона",
-        "EMERGENCY": "🚨 Аварія",
+        "BOTH_ON": "🟢Всюди",
+        "GROUP1_ONLY": f"🔵{a_short}",
+        "GROUP2_ONLY": f"🟣{b_short}",
+        "BOTH_OFF": "Відключення" if alias_limit <= 10 else "⬛Відключення",
+        "GROUP1_ON_GROUP2_MAYBE": "🟢Є/Мож",
+        "GROUP1_MAYBE_GROUP2_ON": "🟣Мож/Є",
+        "GROUP1_OFF_GROUP2_MAYBE": "⬛Ні/Мож",
+        "GROUP1_MAYBE_GROUP2_OFF": "⬛Мож/Ні",
+        "BOTH_MAYBE": "🟨Сіра",
+        "EMERGENCY": "🚨Аварія",
     }
-    return badge_map.get(joint_str, f"⚪ {joint_str}")
+    return badge_map.get(joint_str, f"⚪{joint_str[:6]}")
 
 
 def _pad_emoji_cell(emoji: str, col_width: int) -> str:
@@ -146,10 +146,10 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
     updated_at = _extract_field(timeline_data, "updated_at")
     lines.append(f"⚡️ ДТЕК: {comp_date}")
     if updated_at:
-        lines.append(f"🕒 Оновлено: {updated_at}")
-    lines.append(f"🏠 {subgrp_a or '1'}: {alias_a}")
+        lines.append(f"🕒 Оновл.: {str(updated_at)[:17]}")
+    lines.append(f"🏠 {subgrp_a or '1'}: {alias_a[:18]}")
     if not single_mode:
-        lines.append(f"🏢 {subgrp_b or '2'}: {alias_b}")
+        lines.append(f"🏢 {subgrp_b or '2'}: {alias_b[:18]}")
 
     if is_emergency:
         lines.append("🚨 АВАРІЙНІ ВІДКЛЮЧЕННЯ")
@@ -158,19 +158,25 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
 
     lines.append("")
 
-    # 2. Table Column Headers (full names, no truncation)
+    # 2. Table Column Headers (<= 28 chars, 2-line time column frees space for location names)
     if single_mode:
-        lines.append("ЧАС         │ СТАН")
-        lines.append("────────────┼─────────────")
+        lines.append("ЧАС   │ СТАН")
+        lines.append("──────┼─────────────────────")
     else:
-        name_a = alias_a or "Слот 1"
-        name_b = alias_b or "Слот 2"
-        col_w_a = max(4, len(name_a))
-        col_w_b = max(4, len(name_b))
-        hdr_a = name_a.center(col_w_a)
-        hdr_b = name_b.center(col_w_b)
-        lines.append(f"ЧАС         │ {hdr_a} │ {hdr_b} │ СТАН")
-        lines.append(f"{'─' * 12}┼{'─' * (col_w_a + 2)}┼{'─' * (col_w_b + 2)}┼{'─' * 14}")
+        name_a = alias_a or "СЛ1"
+        name_b = alias_b or "СЛ2"
+        # 28 - 6 (time) - 6 (separators ' │ ' * 2) = 16 chars available for both names
+        if len(name_a) + len(name_b) > 16:
+            hdr_a = name_a[:8]
+            hdr_b = name_b[: max(1, 16 - len(hdr_a))]
+        else:
+            hdr_a, hdr_b = name_a, name_b
+        col_w_a = max(2, len(hdr_a))
+        col_w_b = max(2, len(hdr_b))
+        hdr_a = hdr_a.center(col_w_a)
+        hdr_b = hdr_b.center(col_w_b)
+        lines.append(f"ЧАС   │ {hdr_a} │ {hdr_b}")
+        lines.append(f"{'─' * 6}┼{'─' * (col_w_a + 2)}┼{'─' * (col_w_b + 1)}")
 
     # 3. Contiguous Time Window Aggregation (30-min precision HH:MM-HH:MM)
     i = 0
@@ -205,17 +211,15 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
         else:
             chunk_end = f"{j//2:02d}:{(j%2)*30:02d}"
 
-        time_range = f"{chunk_start}-{chunk_end}"
-        badge = _get_joint_badge(joint_state, alias_a, alias_b, single_mode)
-
         if single_mode:
-            row = f"{time_range:11s} │ {badge}"
+            badge = _get_joint_badge(joint_state, alias_a, alias_b, single_mode)
+            lines.append(f"{chunk_start}-│ {badge}")
+            lines.append(f"{chunk_end} │")
         else:
             ea = _pad_emoji_cell(EMOJI_SLOT_MAP.get(sa, "⬜"), col_w_a)
             eb = _pad_emoji_cell(EMOJI_SLOT_MAP.get(sb, "⬜") if sb else "⬜", col_w_b)
-            row = f"{time_range:11s} │ {ea} │ {eb} │ {badge}"
-
-        lines.append(row)
+            lines.append(f"{chunk_start}-│ {ea} │ {eb}".rstrip())
+            lines.append(f"{chunk_end} │ {' ' * col_w_a} │".rstrip())
         i = j
 
     # 4. Summary Statistics Section
@@ -232,15 +236,15 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
         lines.append(f"• 🟢 Світло є: {g1_only_h} год")
         lines.append(f"• ⬛ Відключення: {both_off_h} год")
         if _safe_float(uncertain_h) > 0:
-            lines.append(f"• 🟨 Сіра зона: {uncertain_h} год")
+            lines.append(f"• 🟨 Сіра: {uncertain_h} год")
     else:
         if show_joint:
             lines.append(f"• 🟢 Всюди: {both_on_h} год")
-            lines.append(f"• 🔵 {alias_a}: {g1_only_h} год")
-            lines.append(f"• 🟣 {alias_b}: {g2_only_h} год")
+            lines.append(f"• 🔵 {alias_a[:11]}: {g1_only_h} год")
+            lines.append(f"• 🟣 {alias_b[:11]}: {g2_only_h} год")
         lines.append(f"• ⬛ Відключення: {both_off_h} год")
         if _safe_float(uncertain_h) > 0:
-            lines.append(f"• 🟨 Сіра зона: {uncertain_h} год")
+            lines.append(f"• 🟨 Сіра: {uncertain_h} год")
 
     # 5. Now Indicator and Countdown
     lines.append("")
@@ -253,16 +257,19 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
 
     if min_to_trans is not None and next_trans_time:
         dur_text = format_duration_uk(int(min_to_trans))
-        lines.append(f"⏳ До зміни ({next_trans_time}): {dur_text}")
+        lines.append(f"⏳ До зміни ({next_trans_time}):")
+        lines.append(f"  {dur_text}")
     elif min_to_trans is not None:
         dur_text = format_duration_uk(int(min_to_trans))
-        lines.append(f"⏳ До зміни: {dur_text}")
+        lines.append("⏳ До зміни:")
+        lines.append(f"  {dur_text}")
     elif next_trans_time:
         lines.append(f"⏳ До зміни: {next_trans_time}")
     else:
         lines.append("⏳ До зміни: —")
 
-    return "\n".join(lines)
+    clamped_lines = [line[:28] for line in lines]
+    return "\n".join(clamped_lines)
 
 
 class TextRenderer:
