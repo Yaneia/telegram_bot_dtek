@@ -43,10 +43,38 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Generate release notes
+        if: steps.tag_check.outputs.exists == 'false'
+        run: |
+          NEW_TAG="${{ steps.tag_check.outputs.tag }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || true)
+
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+
+          {
+            echo "## What's Changed"
+            echo ""
+            COMMITS=$(git log "$RANGE" --no-merges --grep="^chore: update DTEK schedules" --invert-grep --pretty=format:"* %s (%h)" || true)
+            if [ -n "$COMMITS" ]; then
+              echo "$COMMITS"
+            else
+              echo "* Maintenance release"
+            fi
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${NEW_TAG}"
+            fi
+          } > release_notes.md
+          cat release_notes.md
+
       - name: Create GitHub Release
         if: steps.tag_check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag_check.outputs.tag }}
           name: ${{ steps.tag_check.outputs.tag }}
-          generate_release_notes: true
+          body_path: release_notes.md
