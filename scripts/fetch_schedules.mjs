@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { chromium } from 'playwright';
+const { chromium } = await import('playwright-core').catch(() => import('playwright'));
 
 const REGIONS = [
   { id: 'kyiv', name: 'м. Київ', url: 'https://www.dtek-kem.com.ua/ua/shutdowns' },
@@ -140,7 +140,11 @@ async function scrapeRegion(context, region) {
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
 
-  const browser = await chromium.launch({ headless: true });
+  const launchOpts = { headless: true };
+  if (process.env.PLAYWRIGHT_CHANNEL) {
+    launchOpts.channel = process.env.PLAYWRIGHT_CHANNEL;
+  }
+  const browser = await chromium.launch(launchOpts);
 
   try {
     const context = await browser.newContext({

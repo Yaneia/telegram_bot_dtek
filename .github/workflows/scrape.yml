@@ -15,7 +15,7 @@ concurrency:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,10 +25,15 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install Playwright & Chromium
+      - name: Install Playwright (use pre-installed Chrome)
         run: |
-          npm install --no-save playwright
-          npx playwright install chromium --with-deps
+          if command -v google-chrome >/dev/null 2>&1; then
+            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save playwright-core
+            echo "PLAYWRIGHT_CHANNEL=chrome" >> "$GITHUB_ENV"
+          else
+            npm install --no-save playwright-core
+            npx playwright install chromium --with-deps
+          fi
 
       - name: Fetch DTEK schedules
         run: node scripts/fetch_schedules.mjs
@@ -39,6 +44,7 @@ jobs:
             echo "No schedule changes detected."
             exit 0
           fi
+          git pull --rebase --autostash origin main
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add schedules/
