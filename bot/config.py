@@ -70,6 +70,7 @@ if _PYDANTIC_SETTINGS_AVAILABLE:
         SCRAPE_INTERVAL_SECONDS: int = 600
         NOTIFICATION_CHECK_INTERVAL_SECONDS: int = 60
         MOCK_FALLBACK_ONLY: bool = False
+        ENABLE_DIRECT_SCRAPE: bool = False
         LOG_LEVEL: str = "INFO"
         BOT_USERNAME: str = "dtek_tracker_bot"
         MAX_RATE_PER_SECOND: float = 25.0
@@ -88,6 +89,7 @@ else:
         SCRAPE_INTERVAL_SECONDS: int = 600
         NOTIFICATION_CHECK_INTERVAL_SECONDS: int = 60
         MOCK_FALLBACK_ONLY: bool = False
+        ENABLE_DIRECT_SCRAPE: bool = False
         LOG_LEVEL: str = "INFO"
         BOT_USERNAME: str = "dtek_tracker_bot"
         MAX_RATE_PER_SECOND: float = 25.0

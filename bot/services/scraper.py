@@ -158,7 +158,9 @@ class ScraperCascade:
         db_conn: Optional[DatabaseConnectionManager] = None,
         cache_repo: Optional[ScheduleCacheRepository] = None,
         fixtures_dir: Optional[Union[Path, str]] = None,
+        enable_direct_scrape: bool = True,
     ) -> None:
+        self.enable_direct_scrape = enable_direct_scrape
         if cache_repo is not None:
             self.cache_repo: Optional[ScheduleCacheRepository] = cache_repo
         elif db_conn is not None:
@@ -318,15 +320,33 @@ class ScraperCascade:
             reg_enum = DSORegion(reg_str)
         except Exception:
             reg_enum = DSORegion.KYIV
-        url = f"https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data/{reg_str}.json"
+        urls = [
+            f"https://raw.githubusercontent.com/Yaneia/telegram_bot_dtek/main/schedules/{reg_str}.json",
+            f"https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data/{reg_str}.json",
+        ]
 
         if not _HTTPX_AVAILABLE or httpx is None:
             raise RuntimeError("httpx is not installed; Tier 2 mirror unavailable")
 
+        data = None
+        last_exc: Optional[Exception] = None
         async with httpx.AsyncClient(timeout=4.0) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            data = resp.json()
+            for url in urls:
+                try:
+                    resp = await client.get(url)
+                    resp.raise_for_status()
+                    candidate = resp.json()
+                    if isinstance(candidate, dict) and (
+                        candidate.get("fact") or candidate.get("preset") or candidate.get("groups") or candidate.get("schedule")
+                    ):
+                        data = candidate
+                        break
+                except Exception as exc:
+                    last_exc = exc
+                    continue
+
+        if data is None:
+            raise last_exc or RuntimeError(f"All Tier 2 mirrors failed for {reg_str}")
 
         if isinstance(data, dict) and "groups" in data:
             data["region_id"] = reg_str
@@ -579,8 +599,8 @@ class ScraperCascade:
         reg_str = self._normalize_region_str(region)
         resp: Optional[Union[RegionalScheduleResponse, Dict[str, Any]]] = None
 
-        # Tier 1: Direct TLS scrape (if circuit breaker is CLOSED)
-        if not self.circuit_breaker.is_open():
+        # Tier 1: Direct TLS scrape (if enabled and circuit breaker is CLOSED)
+        if self.enable_direct_scrape and not self.circuit_breaker.is_open():
             try:
                 logger.info("Attempting Tier 1 (Direct TLS scrape) for %s", reg_str)
                 resp = await self._fetch_tier1_direct(reg_str)

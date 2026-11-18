@@ -628,10 +628,23 @@
       }
 
       async function fetchMirrorSchedule(region, subgroup) {
-        const url = `https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data/${region}.json`;
-        const resp = await fetch(url, { cache: 'no-store' });
-        if (!resp.ok) throw new Error(`Mirror fetch failed: HTTP ${resp.status}`);
-        const data = await resp.json();
+        const urls = [
+          `https://raw.githubusercontent.com/Yaneia/telegram_bot_dtek/main/schedules/${region}.json`,
+          `https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data/${region}.json`
+        ];
+        let data = null;
+        for (const url of urls) {
+          try {
+            const resp = await fetch(url, { cache: 'no-store' });
+            if (!resp.ok) continue;
+            const candidate = await resp.json();
+            if (candidate && (candidate.fact || candidate.preset || candidate.groups || candidate.schedule)) {
+              data = candidate;
+              break;
+            }
+          } catch (e) {}
+        }
+        if (!data) throw new Error(`Mirror fetch failed for ${region}`);
 
         const isEmergency = Boolean(data.is_emergency);
         const gpvKey = `GPV${subgroup}`;

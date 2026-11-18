@@ -119,7 +119,10 @@ class BotApplication:
             await init_db(conn)
 
         self.db_repo = DatabaseRepository(self.db_manager)
-        self.scraper = ScraperCascade(db_conn=self.db_manager)
+        self.scraper = ScraperCascade(
+            db_conn=self.db_manager,
+            enable_direct_scrape=self.settings.ENABLE_DIRECT_SCRAPE,
+        )
 
         # Initialize Bot and Dispatcher
         token = self.settings.BOT_TOKEN or "123456789:ABCdefGHIjklMNOpqrSTUvwxYZ_mock"
