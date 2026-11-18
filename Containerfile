@@ -34,9 +34,10 @@ ENV PYTHONUNBUFFERED=1 \
     DATABASE_PATH=/app/data/dtek_bot.sqlite3 \
     HEARTBEAT_PATH=/tmp/bot_heartbeat
 
-# Install minimal runtime system libraries for Pillow, curl_cffi, TLS, and timezone
+# Install minimal runtime system libraries for Pillow, curl_cffi, TLS, fonts, and timezone
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    fonts-dejavu-core \
     libjpeg62-turbo \
     zlib1g \
     tzdata \

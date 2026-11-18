@@ -100,6 +100,26 @@ async def _get_db() -> DatabaseRepository:
 # SCHEDULE REFRESH & RENDER MODE TOGGLE
 # ============================================================================
 
+async def _edit_or_answer(
+    msg: Any,
+    text: str,
+    reply_markup: Any = None,
+    parse_mode: str = "HTML",
+) -> None:
+    """Edit message text if it has text, otherwise send a new message (e.g. from photo cards)."""
+    if not msg:
+        return
+    if hasattr(msg, "edit_text") and getattr(msg, "text", None) is not None:
+        try:
+            await msg.edit_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+            return
+        except Exception as exc:
+            if "there is no text in the message to edit" not in str(exc).lower():
+                raise
+    if hasattr(msg, "answer"):
+        await msg.answer(text, parse_mode=parse_mode, reply_markup=reply_markup)
+
+
 @router.callback_query(F.data == "refresh_schedule")
 async def cb_refresh_schedule(
     query: Any,
@@ -113,10 +133,13 @@ async def cb_refresh_schedule(
         except Exception:
             pass
 
+    user = getattr(query, "from_user", None)
+    user_id = getattr(user, "id", 0) if user else 0
+
     msg = getattr(query, "message", None)
     if msg:
         # Delegate to cmd_status using the query sender
-        await cmd_status(msg, db=db, **kwargs)
+        await cmd_status(msg, db=db, user_id=user_id, **kwargs)
 
 
 @router.callback_query(F.data == "toggle_render_mode")
@@ -142,7 +165,7 @@ async def cb_toggle_render_mode(
 
     msg = getattr(query, "message", None)
     if msg:
-        await cmd_status(msg, db=db, **kwargs)
+        await cmd_status(msg, db=db, user_id=user_id, **kwargs)
 
 
 # ============================================================================
@@ -423,14 +446,12 @@ async def cb_menu_main(query: Any, **kwargs: Any) -> None:
         "Оберіть потрібний розділ:"
     )
     msg = getattr(query, "message", None)
-    if msg and hasattr(msg, "edit_text"):
-        await msg.edit_text(
-            text, parse_mode="HTML", reply_markup=build_main_menu_keyboard(settings.WEBAPP_URL)
-        )
-    elif msg and hasattr(msg, "answer"):
-        await msg.answer(
-            text, parse_mode="HTML", reply_markup=build_main_menu_keyboard(settings.WEBAPP_URL)
-        )
+    await _edit_or_answer(
+        msg,
+        text,
+        reply_markup=build_main_menu_keyboard(settings.WEBAPP_URL),
+        parse_mode="HTML",
+    )
 
     if hasattr(query, "answer"):
         try:
@@ -467,10 +488,12 @@ async def cb_menu_slots(
     lines.append("\nОберіть слот нижче для зміни налаштувань:")
 
     msg = getattr(query, "message", None)
-    if msg and hasattr(msg, "edit_text"):
-        await msg.edit_text("\n".join(lines), parse_mode="HTML", reply_markup=build_slots_keyboard(slots))
-    elif msg and hasattr(msg, "answer"):
-        await msg.answer("\n".join(lines), parse_mode="HTML", reply_markup=build_slots_keyboard(slots))
+    await _edit_or_answer(
+        msg,
+        "\n".join(lines),
+        reply_markup=build_slots_keyboard(slots),
+        parse_mode="HTML",
+    )
 
     if hasattr(query, "answer"):
         try:
@@ -498,10 +521,12 @@ async def cb_menu_settings(
         "Керуйте завчасними попередженнями та розкладом тихих годин:"
     )
     msg = getattr(query, "message", None)
-    if msg and hasattr(msg, "edit_text"):
-        await msg.edit_text(text, parse_mode="HTML", reply_markup=build_settings_keyboard(settings_record))
-    elif msg and hasattr(msg, "answer"):
-        await msg.answer(text, parse_mode="HTML", reply_markup=build_settings_keyboard(settings_record))
+    await _edit_or_answer(
+        msg,
+        text,
+        reply_markup=build_settings_keyboard(settings_record),
+        parse_mode="HTML",
+    )
 
     if hasattr(query, "answer"):
         try:
@@ -522,10 +547,12 @@ async def cb_menu_help(query: Any, **kwargs: Any) -> None:
         "🟩 Світло є | ⬛ Світла немає | 🟨 Можливе | 🟥 Аварійні"
     )
     msg = getattr(query, "message", None)
-    if msg and hasattr(msg, "edit_text"):
-        await msg.edit_text(text, parse_mode="HTML", reply_markup=build_help_keyboard(settings.WEBAPP_URL))
-    elif msg and hasattr(msg, "answer"):
-        await msg.answer(text, parse_mode="HTML", reply_markup=build_help_keyboard(settings.WEBAPP_URL))
+    await _edit_or_answer(
+        msg,
+        text,
+        reply_markup=build_help_keyboard(settings.WEBAPP_URL),
+        parse_mode="HTML",
+    )
 
     if hasattr(query, "answer"):
         try:

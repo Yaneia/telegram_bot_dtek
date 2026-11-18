@@ -335,10 +335,44 @@ class ScraperCascade:
             data["stale"] = False
             return RegionalScheduleResponse(**data)
 
-        # Handle Baskerville42 schedule dictionary
+        # Handle Baskerville42 schedule dictionary (either `schedule` or `fact.data.<ts>` / `preset.data`)
         now_dt = datetime.now(KYIV_TZ)
+        today_str = now_dt.strftime("%Y-%m-%d")
         groups: Dict[str, SubgroupSchedule] = {}
-        sched_obj = data.get("schedule", {}) if isinstance(data, dict) else {}
+
+        sched_obj: Dict[str, Any] = {}
+        if isinstance(data, dict):
+            if isinstance(data.get("schedule"), dict) and data["schedule"]:
+                sched_obj = data["schedule"]
+            else:
+                fact_block = data.get("fact") if isinstance(data.get("fact"), dict) else {}
+                fact_data = fact_block.get("data") if isinstance(fact_block.get("data"), dict) else {}
+                if fact_data:
+                    today_ts = str(fact_block.get("today", ""))
+                    if today_ts in fact_data and isinstance(fact_data[today_ts], dict):
+                        day_key = today_ts
+                    else:
+                        # Prefer key matching today's Kyiv date, otherwise first available day
+                        day_key = next(iter(fact_data.keys()))
+                        for k in fact_data.keys():
+                            try:
+                                if datetime.fromtimestamp(int(k), tz=KYIV_TZ).strftime("%Y-%m-%d") == today_str:
+                                    day_key = k
+                                    break
+                            except (ValueError, TypeError, OSError):
+                                continue
+                    if isinstance(fact_data.get(day_key), dict):
+                        sched_obj = fact_data[day_key]
+                        try:
+                            today_str = datetime.fromtimestamp(int(day_key), tz=KYIV_TZ).strftime("%Y-%m-%d")
+                        except (ValueError, TypeError, OSError):
+                            pass
+                elif isinstance(data.get("preset"), dict) and isinstance(data["preset"].get("data"), dict):
+                    preset_data = data["preset"]["data"]
+                    first_preset = next(iter(preset_data.values()), None)
+                    if isinstance(first_preset, dict):
+                        sched_obj = first_preset
+
         for sg_key, hours_dict in sched_obj.items():
             match = re.search(r"([1-6])\.([1-2])", str(sg_key))
             if match:
@@ -353,8 +387,12 @@ class ScraperCascade:
         return RegionalScheduleResponse(
             region_id=reg_str,
             region_name=REGION_NAMES.get(reg_enum, reg_str),
-            date=data.get("date", now_dt.strftime("%Y-%m-%d")) if isinstance(data, dict) else now_dt.strftime("%Y-%m-%d"),
-            updated_at=data.get("updated_at", now_dt.isoformat()) if isinstance(data, dict) else now_dt.isoformat(),
+            date=data.get("date", today_str) if isinstance(data, dict) else today_str,
+            updated_at=(
+                data.get("updated_at") or data.get("lastUpdated") or now_dt.isoformat()
+                if isinstance(data, dict)
+                else now_dt.isoformat()
+            ),
             is_emergency=data.get("is_emergency", False) if isinstance(data, dict) else False,
             emergency_message=data.get("emergency_message") if isinstance(data, dict) else None,
             data_source="github_mirror",

@@ -165,7 +165,9 @@ class DailySchedule(_BaseClass):
         ..., min_length=48, max_length=48, description="48 normalized intervals"
     )
     tier_used: str = Field(default="direct_scrape", description="direct_scrape, github_mirror, yasno_api, cache, mock")
+    data_source: str = Field(default="direct_scrape", description="Alias for tier_used")
     is_stale: bool = Field(default=False)
+    stale: bool = Field(default=False, description="Alias for is_stale")
     schedule_hash: Optional[str] = Field(default=None)
     hash: Optional[str] = Field(default=None)
 
@@ -176,6 +178,14 @@ class DailySchedule(_BaseClass):
         h = data.get("hash") or data.get("schedule_hash")
         data["hash"] = h
         data["schedule_hash"] = h
+        # Support both 'tier_used' and 'data_source' interchangeably
+        ds = data.get("data_source") or data.get("tier_used") or "direct_scrape"
+        data["data_source"] = ds
+        data["tier_used"] = ds
+        # Support both 'is_stale' and 'stale' interchangeably
+        st = bool(data.get("is_stale") or data.get("stale", False))
+        data["is_stale"] = st
+        data["stale"] = st
         super().__init__(**data)
 
     def _validate(self) -> None:

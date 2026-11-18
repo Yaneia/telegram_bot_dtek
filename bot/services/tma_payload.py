@@ -128,9 +128,8 @@ class TMAPayload:
             slot_a = response.get("slot_a", {})
 
         alias_a = str(getattr(slot_a, "alias", None) or (slot_a.get("alias") if isinstance(slot_a, dict) else "Дім") or "Дім")
-        region_a = str(getattr(slot_a, "region_code", None) or (slot_a.get("region_code") if isinstance(slot_a, dict) else "kyiv") or "kyiv")
-        if hasattr(region_a, "value"):
-            region_a = region_a.value
+        raw_reg_a = getattr(slot_a, "region_code", None) or (slot_a.get("region_code") if isinstance(slot_a, dict) else "kyiv") or "kyiv"
+        region_a = str(raw_reg_a.value if hasattr(raw_reg_a, "value") else raw_reg_a)
         group_a = getattr(slot_a, "group_id", None) or (slot_a.get("group_id") if isinstance(slot_a, dict) else 1) or 1
         subgroup_a = str(getattr(slot_a, "subgroup_id", None) or (slot_a.get("subgroup_id") if isinstance(slot_a, dict) else "1.1") or "1.1")
 
@@ -147,9 +146,8 @@ class TMAPayload:
         alias_b = ""
         if not single_slot:
             alias_b = str(getattr(slot_b, "alias", None) or (slot_b.get("alias") if isinstance(slot_b, dict) else "Офіс") or "Офіс")
-            region_b = str(getattr(slot_b, "region_code", None) or (slot_b.get("region_code") if isinstance(slot_b, dict) else "kyiv") or "kyiv")
-            if hasattr(region_b, "value"):
-                region_b = region_b.value
+            raw_reg_b = getattr(slot_b, "region_code", None) or (slot_b.get("region_code") if isinstance(slot_b, dict) else "kyiv") or "kyiv"
+            region_b = str(raw_reg_b.value if hasattr(raw_reg_b, "value") else raw_reg_b)
             group_b = getattr(slot_b, "group_id", None) or (slot_b.get("group_id") if isinstance(slot_b, dict) else 1) or 1
             subgroup_b = str(getattr(slot_b, "subgroup_id", None) or (slot_b.get("subgroup_id") if isinstance(slot_b, dict) else "1.1") or "1.1")
             slot_b_dict = {

@@ -240,6 +240,7 @@ async def cmd_status(
     db: Optional[DatabaseRepository] = None,
     scraper: Optional[ScraperCascade] = None,
     bot: Optional[Any] = None,
+    user_id: Optional[int] = None,
     **kwargs: Any,
 ) -> None:
     """
@@ -252,8 +253,9 @@ async def cmd_status(
     if scraper is None:
         scraper = _get_scraper()
 
-    user = getattr(message, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    if user_id is None:
+        user = getattr(message, "from_user", None)
+        user_id = getattr(user, "id", 0) if user else 0
 
     slots = await db.slots.get_slots_for_user(user_id)
     if not slots:

@@ -35,6 +35,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 
   <style>
+    .grid-cols-48 {
+      grid-template-columns: repeat(48, minmax(0, 1fr));
+    }
     :root {
       --bg-color: var(--tg-theme-bg-color, #0f172a);
       --text-color: var(--tg-theme-text-color, #f8fafc);
@@ -642,6 +645,22 @@
           };
         }
 
+        if (data.fact && data.fact.data) {
+          const factData = data.fact.data;
+          const todayTs = data.fact.today !== undefined ? String(data.fact.today) : null;
+          const dayKey = (todayTs && factData[todayTs]) ? todayTs : Object.keys(factData)[0];
+          const dayGroups = dayKey ? factData[dayKey] : null;
+          const hoursDict = dayGroups && (dayGroups[gpvKey] || dayGroups[subgroup]);
+          if (hoursDict) {
+            return {
+              date: data.date || appState.comparisonDate,
+              isEmergency,
+              stale: false,
+              sched: normalizeHoursDict(hoursDict, isEmergency)
+            };
+          }
+        }
+
         return {
           date: data.date || appState.comparisonDate,
           isEmergency,
@@ -1180,7 +1199,9 @@
           );
 
           let sentViaData = false;
-          if (tg && typeof tg.sendData === 'function') {
+          // tg.sendData() only works when launched via KeyboardButton; inline/menu WebApps have tg.initData set
+          const canSendData = Boolean(tg && typeof tg.sendData === 'function' && !tg.initData);
+          if (canSendData) {
             try {
               tg.sendData(JSON.stringify({
                 slot_a: appState.slotA,
@@ -1196,6 +1217,9 @@
             const deepLink = `https://t.me/${botUser}?start=${syncCode}`;
             if (tg && typeof tg.openTelegramLink === 'function') {
               tg.openTelegramLink(deepLink);
+              if (typeof tg.close === 'function') {
+                setTimeout(() => tg.close(), 150);
+              }
             } else {
               window.location.href = deepLink;
             }
