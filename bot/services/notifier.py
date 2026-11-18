@@ -387,10 +387,12 @@ class NotifierService:
             elif (
                 "forbidden" in err_str
                 or "bot was blocked" in err_str
+                or "chat not found" in err_str
+                or "user is deactivated" in err_str
                 or "403" in err_str
                 or getattr(exc, "code", None) == 403
             ):
-                logger.warning("Telegram 403 Forbidden for user %s; marking inactive: %s", user_id, exc)
+                logger.warning("Telegram chat unavailable for user %s; marking inactive: %s", user_id, exc)
                 await self._deactivate_user(user_id)
             else:
                 logger.warning("Failed to dispatch alert to chat %s (user %s): %s", chat_id, user_id, exc)

@@ -10,6 +10,11 @@ const REGIONS = [
 ];
 
 const OUT_DIR = path.resolve(process.cwd(), 'schedules');
+const MAX_RETRY = 3;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function readExisting(filePath) {
   try {
@@ -20,81 +25,129 @@ async function readExisting(filePath) {
   }
 }
 
+function extractBalancedJson(html, marker) {
+  const idx = html.indexOf(marker);
+  if (idx === -1) return null;
+  const braceStart = html.indexOf('{', idx + marker.length);
+  if (braceStart === -1) return null;
+
+  let depth = 0;
+  let inStr = false;
+  let escape = false;
+  for (let i = braceStart; i < html.length; i++) {
+    const ch = html[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === '\\' && inStr) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inStr = !inStr;
+      continue;
+    }
+    if (!inStr) {
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          return JSON.parse(html.slice(braceStart, i + 1));
+        }
+      }
+    }
+  }
+  return null;
+}
+
 async function scrapeRegion(context, region) {
-  const page = await context.newPage();
   const outPath = path.join(OUT_DIR, `${region.id}.json`);
   const nowIso = new Date().toISOString();
+  let lastError = null;
 
-  try {
-    console.log(`[${region.id}] Navigating to ${region.url}...`);
-    await page.goto(region.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+    const page = await context.newPage();
+    try {
+      console.log(`[${region.id}] Attempt ${attempt}/${MAX_RETRY}: ${region.url}`);
+      await page.goto(region.url, { waitUntil: 'networkidle', timeout: 90000 });
+      await page.waitForTimeout(1000);
 
-    // Wait for Incapsula JS challenge (if any) to resolve and DisconSchedule to populate
-    await page.waitForFunction(
-      () => typeof window.DisconSchedule !== 'undefined' && (window.DisconSchedule.fact || window.DisconSchedule.preset),
-      { timeout: 30000 }
-    );
+      const html = await page.content();
+      let fact = null;
+      let preset = null;
 
-    const extracted = await page.evaluate(() => {
-      const ds = window.DisconSchedule || {};
-      return {
-        fact: ds.fact || null,
-        preset: ds.preset || null,
+      try {
+        const fromWindow = await page.evaluate(() => {
+          const ds = window.DisconSchedule;
+          return ds ? { fact: ds.fact || null, preset: ds.preset || null } : null;
+        });
+        if (fromWindow) {
+          fact = fromWindow.fact;
+          preset = fromWindow.preset;
+        }
+      } catch {}
+
+      if (!fact) fact = extractBalancedJson(html, 'DisconSchedule.fact');
+      if (!preset) preset = extractBalancedJson(html, 'DisconSchedule.preset');
+
+      if (!fact && !preset) {
+        throw new Error(`No DisconSchedule found in HTML (${html.length} bytes)`);
+      }
+
+      const payload = {
+        regionId: region.id,
+        regionAffiliation: region.name,
+        lastUpdated: nowIso,
+        fact: fact || {},
+        preset: preset || {},
+        lastUpdateStatus: {
+          status: 'parsed',
+          ok: true,
+          at: nowIso,
+          attempt,
+        },
       };
-    });
 
-    if (!extracted.fact && !extracted.preset) {
-      throw new Error('DisconSchedule.fact and preset are both empty');
+      await writeFile(outPath, JSON.stringify(payload, null, 2) + '\n', 'utf-8');
+      console.log(`[${region.id}] Saved schedule successfully (${html.length} bytes HTML).`);
+      return;
+    } catch (err) {
+      lastError = err;
+      console.warn(`[${region.id}] Attempt ${attempt} failed: ${err.message}`);
+      if (attempt < MAX_RETRY) {
+        await sleep(2000 * attempt + Math.floor(Math.random() * 500));
+      }
+    } finally {
+      await page.close();
     }
+  }
 
-    const payload = {
-      regionId: region.id,
-      regionAffiliation: region.name,
-      lastUpdated: nowIso,
-      fact: extracted.fact || {},
-      preset: extracted.preset || {},
-      lastUpdateStatus: {
-        status: 'parsed',
-        ok: true,
-        at: nowIso,
-      },
+  console.warn(`[${region.id}] All ${MAX_RETRY} attempts failed.`);
+  const existing = await readExisting(outPath);
+  if (existing) {
+    existing.lastUpdateStatus = {
+      status: 'error',
+      ok: false,
+      message: String(lastError?.message || lastError),
+      at: nowIso,
     };
-
-    await writeFile(outPath, JSON.stringify(payload, null, 2) + '\n', 'utf-8');
-    console.log(`[${region.id}] Saved schedule successfully.`);
-  } catch (err) {
-    console.warn(`[${region.id}] Scrape failed: ${err.message}`);
-    const existing = await readExisting(outPath);
-    if (existing) {
-      existing.lastUpdateStatus = {
-        status: 'error',
-        ok: false,
-        message: String(err.message || err),
-        at: nowIso,
-      };
-      await writeFile(outPath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
-      console.log(`[${region.id}] Preserved existing fact/preset data.`);
-    }
-  } finally {
-    await page.close();
+    await writeFile(outPath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+    console.log(`[${region.id}] Preserved existing fact/preset data.`);
   }
 }
 
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
-  });
+  const browser = await chromium.launch({ headless: true });
 
   try {
     const context = await browser.newContext({
       locale: 'uk-UA',
       timezoneId: 'Europe/Kyiv',
       userAgent:
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-      viewport: { width: 1280, height: 800 },
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
     });
 
     for (const region of REGIONS) {
