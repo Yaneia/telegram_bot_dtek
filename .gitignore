@@ -37,6 +37,9 @@ PROMPT_SPECIFICATION.md
 TEST_INFRA.md
 TEST_READY.md
 
+# Node / Playwright
+node_modules/
+
 # OS / editors
 .DS_Store
 .idea/

@@ -25,14 +25,31 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Cache Playwright dependencies
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.cache/ms-playwright
+          key: ${{ runner.os }}-pw-${{ hashFiles('.github/workflows/scrape.yml', 'scripts/fetch_schedules.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-pw-
+
       - name: Install Playwright (use pre-installed Chrome)
         run: |
           if command -v google-chrome >/dev/null 2>&1; then
-            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save playwright-core
+            if [ ! -d "node_modules/playwright-core" ]; then
+              PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save playwright-core
+            fi
             echo "PLAYWRIGHT_CHANNEL=chrome" >> "$GITHUB_ENV"
           else
-            npm install --no-save playwright-core
-            npx playwright install chromium --with-deps
+            if [ ! -d "node_modules/playwright-core" ]; then
+              npm install --no-save playwright-core
+            fi
+            if [ "${{ steps.pw-cache.outputs.cache-hit }}" != "true" ]; then
+              npx playwright install chromium --with-deps
+            fi
           fi
 
       - name: Fetch DTEK schedules
