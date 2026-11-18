@@ -1,14 +1,13 @@
-workflow: TrunkBased/v1
 tag-prefix: '[vV]?'
-mode: ContinuousDelivery
 commit-message-incrementing: Enabled
 major-version-bump-message: '\+semver:\s?(breaking|major)|BREAKING CHANGE:'
 minor-version-bump-message: '\+semver:\s?(feature|minor)|^feat(\([^)]+\))?:'
 patch-version-bump-message: '\+semver:\s?(fix|patch)|^fix(\([^)]+\))?:'
-no-bump-message: '\+semver:\s?(none|skip)|^chore\(schedules\):|^chore: update DTEK schedules'
+no-bump-message: '\+semver:\s?(none|skip)|^chore: update DTEK schedules'
 
 branches:
   main:
+    mode: ContinuousDelivery
     regex: ^main$
     label: ''
     increment: Patch
@@ -18,6 +17,7 @@ branches:
     is-main-branch: true
     is-release-branch: false
   feature:
+    mode: ContinuousDelivery
     regex: ^(feat|feature|fix)[/-]
     label: '{BranchName}'
     increment: Inherit
@@ -26,6 +26,7 @@ branches:
     is-main-branch: false
     is-release-branch: false
   pull-request:
+    mode: ContinuousDelivery
     regex: ^(pull|pull\-requests|pr)[/-]
     label: PullRequest
     increment: Inherit
