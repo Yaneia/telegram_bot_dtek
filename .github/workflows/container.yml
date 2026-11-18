@@ -70,5 +70,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: |
+            index:org.opencontainers.image.title=DTEK Outage Tracker Bot
+            index:org.opencontainers.image.description=Outbound-only Telegram bot for tracking Ukrainian electricity outage schedules (DTEK) across 4 regions
+            index:org.opencontainers.image.source=https://github.com/Yaneia/telegram_bot_dtek
+            index:org.opencontainers.image.licenses=MIT
           cache-from: type=gha
           cache-to: type=gha,mode=max
