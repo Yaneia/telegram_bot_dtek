@@ -46,10 +46,16 @@ EMOJI_SLOT_MAP: Dict[str, str] = {
 }
 
 
-def _get_joint_badge(joint_str: str, alias_a: str, alias_b: str, single_mode: bool) -> str:
+def _get_joint_badge(
+    joint_str: str,
+    alias_a: str,
+    alias_b: str,
+    single_mode: bool,
+    alias_limit: int = 4,
+) -> str:
     """Get authoritative compact badge representation for table row and current status."""
-    a_short = (alias_a[:4] if alias_a else "СЛ1")
-    b_short = (alias_b[:4] if alias_b else "СЛ2")
+    a_short = (alias_a[:alias_limit] if alias_a else "СЛ1")
+    b_short = (alias_b[:alias_limit] if alias_b else "СЛ2")
 
     if single_mode:
         if joint_str == "ON":
@@ -122,15 +128,17 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
 
     alias_a = str(_extract_field(slot_a, "alias", "Дім") or "Дім")
     alias_b = str(_extract_field(slot_b, "alias", "Офіс") or "Офіс") if not single_mode else ""
+    subgrp_a = str(_extract_field(slot_a, "subgroup_id", "") or "")
+    subgrp_b = str(_extract_field(slot_b, "subgroup_id", "") or "") if not single_mode else ""
 
     summary = _extract_field(timeline_data, "summary") or {}
     raw_timeline = _extract_field(timeline_data, "timeline") or []
 
     # Title with variation selector matching test_cross_feature contract
     lines.append(f"⚡️ ДТЕК: {comp_date}")
-    lines.append(f"🏠 1: {alias_a[:18]}")
+    lines.append(f"🏠 {subgrp_a or '1'}: {alias_a[:18]}")
     if not single_mode:
-        lines.append(f"🏢 2: {alias_b[:18]}")
+        lines.append(f"🏢 {subgrp_b or '2'}: {alias_b[:18]}")
 
     if is_emergency:
         lines.append("🚨 АВАРІЙНІ ВІДКЛЮЧЕННЯ")
@@ -220,8 +228,8 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
     else:
         if show_joint:
             lines.append(f"• 🟢 Всюди: {both_on_h} год")
-            lines.append(f"• 🔵 Лише 1: {g1_only_h} год")
-            lines.append(f"• 🟣 Лише 2: {g2_only_h} год")
+            lines.append(f"• 🔵 {alias_a[:11]}: {g1_only_h} год")
+            lines.append(f"• 🟣 {alias_b[:11]}: {g2_only_h} год")
         lines.append(f"• ⬛ Відключення: {both_off_h} год")
         if _safe_float(uncertain_h) > 0:
             lines.append(f"• 🟨 Сіра: {uncertain_h} год")
@@ -229,7 +237,7 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
     # 5. Now Indicator and Countdown
     lines.append("")
     cur_joint = _extract_str(_extract_field(summary, "current_joint_status", "BOTH_MAYBE"))
-    cur_badge = _get_joint_badge(cur_joint, alias_a, alias_b, single_mode)
+    cur_badge = _get_joint_badge(cur_joint, alias_a, alias_b, single_mode, alias_limit=16)
     lines.append(f"📍 Зараз: {cur_badge}")
 
     next_trans_time = _extract_field(summary, "next_transition_time")
