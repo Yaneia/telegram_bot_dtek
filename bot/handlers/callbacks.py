@@ -109,6 +109,19 @@ async def _get_db() -> DatabaseRepository:
 # SCHEDULE REFRESH & RENDER MODE TOGGLE
 # ============================================================================
 
+async def _ensure_user(db: DatabaseRepository, user: Any) -> int:
+    """Ensure a user row exists before inserting/updating child tables with FK constraints."""
+    user_id = getattr(user, "id", 0) if user else 0
+    if user_id and hasattr(db, "users") and hasattr(db.users, "upsert_user"):
+        await db.users.upsert_user(
+            user_id=user_id,
+            username=getattr(user, "username", None),
+            first_name=getattr(user, "first_name", None),
+            language_code=getattr(user, "language_code", "uk") or "uk",
+        )
+    return user_id
+
+
 async def _edit_or_answer(
     msg: Any,
     text: str,
@@ -276,7 +289,7 @@ async def cb_slot_subgroup(
         db = await _get_db()
 
     user = getattr(query, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id = await _ensure_user(db, user)
 
     data = getattr(query, "data", "") or ""
     parts = data.split(":")
@@ -488,7 +501,7 @@ async def cb_slot_joint(
         db = await _get_db()
 
     user = getattr(query, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id = await _ensure_user(db, user)
 
     data = getattr(query, "data", "") or ""
     enable_joint = data.endswith(":1")
@@ -522,7 +535,7 @@ async def cb_toggle_joint_timeline(
         db = await _get_db()
 
     user = getattr(query, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id = await _ensure_user(db, user)
 
     current = await db.settings.get_settings(user_id)
     new_val = not bool(getattr(current, "show_joint_timeline", False))
@@ -591,7 +604,7 @@ async def cb_toggle_notif(
         db = await _get_db()
 
     user = getattr(query, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id = await _ensure_user(db, user)
 
     data = getattr(query, "data", "") or ""
     setting_key = data.split(":", 1)[1] if ":" in data else ""
@@ -636,7 +649,7 @@ async def cb_toggle_silent_hours(
         db = await _get_db()
 
     user = getattr(query, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id = await _ensure_user(db, user)
 
     settings_record = await db.settings.get_settings(user_id)
     cur_start = settings_record.silent_hours_start
@@ -813,7 +826,7 @@ async def handle_web_app_data(
         db = await _get_db()
 
     user = getattr(message, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id = await _ensure_user(db, user)
 
     web_app_data = getattr(message, "web_app_data", None)
     raw_json = getattr(web_app_data, "data", "{}") or "{}"
