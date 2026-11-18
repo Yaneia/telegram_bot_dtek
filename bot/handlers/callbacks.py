@@ -297,7 +297,7 @@ async def cb_slot_subgroup(
     subgroup_id = parts[4] if len(parts) > 4 else f"{group_id}.1"
 
     existing = await db.slots.get_slot(user_id, slot_num)
-    alias = existing.alias if (existing and existing.alias) else ("Дім" if slot_num == 1 else "Офіс")
+    alias = existing.alias if (existing and existing.alias) else f"Слот {slot_num}"
 
     await db.slots.upsert_slot(
         user_id=user_id,
@@ -326,7 +326,7 @@ async def cb_slot_subgroup(
 
     text = (
         f"📍 <b>Слот {slot_num}</b> ({region_code}, Черга <b>{subgroup_id}</b>)\n\n"
-        f"✏️ Введіть назву для цього слота (до 16 символів, наприклад: <i>Квартира</i> або <i>Робота</i>),\n"
+        f"✏️ Введіть назву для цього слота (до 16 символів, наприклад: <i>Дім</i>, <i>Офіс</i>, <i>Квартира</i>),\n"
         f"або натисніть кнопку нижче, щоб залишити <b>{alias}</b>:"
     )
 
@@ -368,7 +368,7 @@ async def cb_slot_keep_alias(
 
     slots = await db.slots.get_slots_for_user(user_id)
     slot = next((s for s in slots if getattr(s, "slot_number", None) == slot_num), None)
-    alias = getattr(slot, "alias", None) or ("Дім" if slot_num == 1 else "Офіс")
+    alias = getattr(slot, "alias", None) or f"Слот {slot_num}"
     region_code = getattr(slot, "region_code", "") if slot else ""
     if hasattr(region_code, "value"):
         region_code = region_code.value

@@ -104,7 +104,7 @@ def build_onboarding_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton(
-                text="➕ Налаштувати Слот 1 (Дім)",
+                text="➕ Додати слот 1",
                 callback_data="slot_edit:1",
             )
         ],
@@ -153,12 +153,12 @@ def build_slots_keyboard(slots: List[Any]) -> InlineKeyboardMarkup:
 
     if not has_slot1:
         keyboard.append([
-            InlineKeyboardButton(text="➕ Налаштувати Слот 1 (Дім)", callback_data="slot_edit:1")
+            InlineKeyboardButton(text="➕ Додати слот 1", callback_data="slot_edit:1")
         ])
 
     if not has_slot2:
         keyboard.append([
-            InlineKeyboardButton(text="➕ Додати Слот 2 (Офіс)", callback_data="slot_edit:2")
+            InlineKeyboardButton(text="➕ Додати слот 2", callback_data="slot_edit:2")
         ])
 
     keyboard.append([
