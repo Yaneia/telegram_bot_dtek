@@ -182,7 +182,7 @@ def _render_fallback_png(timeline_data: Any, **kwargs: Any) -> bytes:
     return sig + ihdr_chunk + phys_chunk + idat_chunk + iend_chunk
 
 
-def render_timeline_png(timeline_data: Any, show_joint: bool = True, **kwargs: Any) -> bytes:
+def render_timeline_png(timeline_data: Any, show_joint: bool = True, show_now: bool = True, **kwargs: Any) -> bytes:
     """
     Render 1200x640 2x Retina PNG card for dual-slot or single-slot schedule.
     Returns PNG buffer as raw bytes.
@@ -318,20 +318,21 @@ def render_timeline_png(timeline_data: Any, show_joint: bool = True, **kwargs: A
             if show_joint:
                 draw.line([(x0, 352), (x0, 402)], fill=canvas_bg, width=1)
 
-    # 3. Dynamic "Now" Needle
-    raw_idx = _extract_timeline_field(summary, "current_slot_index", 0)
-    try:
-        cur_idx = int(raw_idx) if raw_idx is not None else 0
-    except (ValueError, TypeError):
-        cur_idx = 0
-    cur_idx = min(47, max(0, cur_idx))
-    now_x = int(x_start + (cur_idx + 0.5) * slot_w)
+    # 3. Dynamic "Now" Needle (only for today's schedule)
+    if show_now:
+        raw_idx = _extract_timeline_field(summary, "current_slot_index", 0)
+        try:
+            cur_idx = int(raw_idx) if raw_idx is not None else 0
+        except (ValueError, TypeError):
+            cur_idx = 0
+        cur_idx = min(47, max(0, cur_idx))
+        now_x = int(x_start + (cur_idx + 0.5) * slot_w)
 
-    # Needle 3px red line (#EF4444)
-    needle_bottom = 420 if show_joint else 340
-    draw.line([(now_x, 160), (now_x, needle_bottom)], fill=(239, 68, 68, 255), width=3)
-    # Needle indicator flag
-    draw.polygon([(now_x - 5, 150), (now_x + 5, 150), (now_x, 159)], fill=(239, 68, 68, 255))
+        # Needle 3px red line (#EF4444)
+        needle_bottom = 420 if show_joint else 340
+        draw.line([(now_x, 160), (now_x, needle_bottom)], fill=(239, 68, 68, 255), width=3)
+        # Needle indicator flag
+        draw.polygon([(now_x - 5, 150), (now_x + 5, 150), (now_x, 159)], fill=(239, 68, 68, 255))
 
     # 4. Summary Metric Pills Zone (Y: 480..600)
     # 4 distinct rounded pills sampled at Y: 520 and Y: 560

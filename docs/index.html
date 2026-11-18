@@ -74,9 +74,13 @@
       <div class="flex items-center gap-2">
         <span class="text-xl">⚡️</span>
         <div>
-          <h1 class="font-bold text-base tracking-tight text-white flex items-center gap-1.5">
+          <h1 class="font-bold text-base tracking-tight text-white flex items-center gap-1.5 flex-wrap">
             ДТЕК Графік
             <span id="date-badge" class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">2026-11-11</span>
+            <div id="day-switcher" class="hidden inline-flex rounded-md bg-slate-800 p-0.5 text-[11px] font-medium">
+              <button id="btn-day-today" type="button" class="px-2 py-0.5 rounded bg-blue-600 text-white">Сьогодні</button>
+              <button id="btn-day-tomorrow" type="button" class="px-2 py-0.5 rounded text-slate-300 hover:text-white">Завтра</button>
+            </div>
           </h1>
           <p id="updated-badge" class="text-[11px] text-slate-400 hidden"></p>
         </div>
@@ -454,6 +458,9 @@
         hasSlotB: true,
         showJoint: false,
         updatedAt: null,
+        selectedDay: 'today',
+        todayDate: null,
+        tomorrowDate: null,
         timeline: [],
         metrics: {
           bothOnHours: 0,
@@ -629,7 +636,7 @@
         return res;
       }
 
-      async function fetchMirrorSchedule(region, subgroup) {
+      async function fetchMirrorSchedule(region, subgroup, targetDate = null) {
         const urls = [
           `https://raw.githubusercontent.com/Yaneia/telegram_bot_dtek/main/schedules/${region}.json`,
           `https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data/${region}.json`
@@ -656,6 +663,7 @@
             date: data.date || appState.comparisonDate,
             isEmergency,
             stale: false,
+            availableDates: [],
             sched: data.groups[gpvKey].slots.map(s => charToStatus(s.status))
           };
         }
@@ -665,22 +673,48 @@
             date: data.date || appState.comparisonDate,
             isEmergency,
             stale: false,
+            availableDates: [],
             sched: normalizeHoursDict(data.schedule[subgroup], isEmergency)
           };
         }
 
         if (data.fact && data.fact.data) {
           const factData = data.fact.data;
-          const todayTs = data.fact.today !== undefined ? String(data.fact.today) : null;
-          const dayKey = (todayTs && factData[todayTs]) ? todayTs : Object.keys(factData)[0];
+          const tsToDate = {};
+          const availableDates = [];
+          for (const tsKey of Object.keys(factData)) {
+            const dStr = new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'Europe/Kyiv',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit'
+            }).format(new Date(Number(tsKey) * 1000));
+            tsToDate[tsKey] = dStr;
+            if (!availableDates.includes(dStr)) availableDates.push(dStr);
+          }
+          availableDates.sort();
+
+          let dayKey = null;
+          if (targetDate) {
+            dayKey = Object.keys(tsToDate).find(k => tsToDate[k] === targetDate) || null;
+          }
+          if (!dayKey) {
+            const todayStr = getKyivDateStr();
+            dayKey = Object.keys(tsToDate).find(k => tsToDate[k] === todayStr) || null;
+          }
+          if (!dayKey) {
+            const todayTs = data.fact.today !== undefined ? String(data.fact.today) : null;
+            dayKey = (todayTs && factData[todayTs]) ? todayTs : Object.keys(factData)[0];
+          }
           const dayGroups = dayKey ? factData[dayKey] : null;
           const hoursDict = dayGroups && (dayGroups[gpvKey] || dayGroups[subgroup]);
           if (hoursDict) {
             return {
-              date: data.date || appState.comparisonDate,
+              date: (dayKey && tsToDate[dayKey]) || data.date || appState.comparisonDate,
               updatedAt: data.fact.update || data.lastUpdated || null,
               isEmergency,
               stale: false,
+              availableDates,
               sched: normalizeHoursDict(hoursDict, isEmergency)
             };
           }
@@ -690,8 +724,19 @@
           date: data.date || appState.comparisonDate,
           isEmergency,
           stale: false,
+          availableDates: [],
           sched: Array(48).fill('ON')
         };
+      }
+
+      function getKyivDateStr(offsetDays = 0) {
+        const dt = new Date(Date.now() + offsetDays * 86400000);
+        return new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Europe/Kyiv',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(dt);
       }
 
       // =========================================================================
@@ -897,12 +942,16 @@
       }
 
       function updateNowIndicator() {
+        const needle = document.getElementById('now-needle');
+        if (appState.comparisonDate !== getKyivDateStr(0)) {
+          needle.classList.add('hidden');
+          return;
+        }
+        needle.classList.remove('hidden');
         const kyiv = getKyivTime();
         const slotIdx = Math.floor((kyiv.hour * 60 + kyiv.minute) / 30);
         const minuteFraction = (kyiv.minute % 30 + kyiv.second / 60) / 30;
         const percent = Math.min(100, Math.max(0, ((slotIdx + minuteFraction) / 48) * 100));
-
-        const needle = document.getElementById('now-needle');
         needle.style.left = `${percent}%`;
       }
 
@@ -1415,6 +1464,55 @@
         computeTimeline();
         renderApp();
         scrollToNowNeedle();
+
+        // Day switcher (Today / Tomorrow)
+        async function loadDaySchedule(dayKey) {
+          const targetDate = dayKey === 'tomorrow' ? appState.tomorrowDate : appState.todayDate;
+          if (!targetDate) return;
+          appState.selectedDay = dayKey;
+          updateDaySwitcherUI();
+          try {
+            const dA = await fetchMirrorSchedule(appState.slotA.region, appState.slotA.subgroup, targetDate);
+            appState.slotA.sched = dA.sched;
+            appState.comparisonDate = dA.date;
+            if (dA.updatedAt) appState.updatedAt = dA.updatedAt;
+            if (appState.hasSlotB) {
+              const dB = await fetchMirrorSchedule(appState.slotB.region, appState.slotB.subgroup, targetDate);
+              appState.slotB.sched = dB.sched;
+            }
+            computeTimeline();
+            renderApp();
+          } catch (e) {}
+        }
+
+        function updateDaySwitcherUI() {
+          const switcher = document.getElementById('day-switcher');
+          const btnToday = document.getElementById('btn-day-today');
+          const btnTomorrow = document.getElementById('btn-day-tomorrow');
+          if (!switcher || !appState.tomorrowDate) return;
+          switcher.classList.remove('hidden');
+          const isTom = appState.comparisonDate === appState.tomorrowDate;
+          btnToday.className = isTom ? 'px-2 py-0.5 rounded text-slate-300 hover:text-white' : 'px-2 py-0.5 rounded bg-blue-600 text-white';
+          btnTomorrow.className = isTom ? 'px-2 py-0.5 rounded bg-blue-600 text-white' : 'px-2 py-0.5 rounded text-slate-300 hover:text-white';
+        }
+
+        const btnDayToday = document.getElementById('btn-day-today');
+        const btnDayTomorrow = document.getElementById('btn-day-tomorrow');
+        if (btnDayToday) btnDayToday.addEventListener('click', () => loadDaySchedule('today'));
+        if (btnDayTomorrow) btnDayTomorrow.addEventListener('click', () => loadDaySchedule('tomorrow'));
+
+        // Background check for tomorrow's schedule availability
+        (async () => {
+          try {
+            appState.todayDate = getKyivDateStr(0);
+            const tomorrowStr = getKyivDateStr(1);
+            const probe = await fetchMirrorSchedule(appState.slotA.region, appState.slotA.subgroup, appState.todayDate);
+            if (probe.availableDates && probe.availableDates.includes(tomorrowStr)) {
+              appState.tomorrowDate = tomorrowStr;
+              updateDaySwitcherUI();
+            }
+          } catch (e) {}
+        })();
 
         // 30-second interval timer for "Now" needle & countdown update
         setInterval(() => {

@@ -361,7 +361,8 @@ async def cmd_status(
 
     if current_mode == "image":
         try:
-            png_bytes = ImageRenderer.render_timeline_png(comparison, show_joint=show_joint)
+            is_today = target_date is None or target_date == now.strftime("%Y-%m-%d")
+            png_bytes = ImageRenderer.render_timeline_png(comparison, show_joint=show_joint, show_now=is_today)
             caption = (
                 f"⚡ <b>Графік відключень на {comparison.comparison_date}</b>\n"
                 f"📍 {slot1.alias} ({slot1.subgroup_id})"
