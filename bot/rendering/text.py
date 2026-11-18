@@ -214,7 +214,7 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
 
     if single_mode:
         lines.append(f"• 🟢 Світло є: {g1_only_h} год")
-        lines.append(f"• ⬛ Відсутнє: {both_off_h} год")
+        lines.append(f"• ⬛ Відключення: {both_off_h} год")
         if _safe_float(uncertain_h) > 0:
             lines.append(f"• 🟨 Сіра: {uncertain_h} год")
     else:
@@ -222,7 +222,7 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
             lines.append(f"• 🟢 Всюди: {both_on_h} год")
             lines.append(f"• 🔵 Лише 1: {g1_only_h} год")
             lines.append(f"• 🟣 Лише 2: {g2_only_h} год")
-        lines.append(f"• ⬛ Відсутнє: {both_off_h} год")
+        lines.append(f"• ⬛ Відключення: {both_off_h} год")
         if _safe_float(uncertain_h) > 0:
             lines.append(f"• 🟨 Сіра: {uncertain_h} год")
 

@@ -259,7 +259,7 @@ def render_timeline_png(timeline_data: Any, show_joint: bool = True, **kwargs: A
     if show_joint:
         # Visual separator between main slot lanes and optional joint lane
         draw.line([(25, 336), (1120, 336)], fill=(51, 65, 85, 255), width=2)
-        draw.text((25, 369), "Спільний", fill=(251, 191, 36, 255), font=font_label)
+        draw.text((16, 369), "Спільний", fill=(251, 191, 36, 255), font=font_label)
 
     # Time ticks above Lane 1 (Y: 155)
     for hour in range(0, 25, 3):
@@ -326,17 +326,17 @@ def render_timeline_png(timeline_data: Any, show_joint: bool = True, **kwargs: A
     uncertain_h = _extract_timeline_field(summary, "uncertain_hours", 0.0) or 0.0
 
     pills_config = [
-        (80, 320, (34, 197, 94, 255), f"Всюди: {both_on_h}г"),
-        (345, 585, (59, 130, 246, 255), f"{alias_a[:5]}: {g1_only_h}г"),
-        (610, 850, (139, 92, 246, 255), f"{alias_b[:5]}: {g2_only_h}г" if not single_mode else f"Сіра: {uncertain_h}г"),
-        (875, 1120, (239, 68, 68, 255), f"Відсутнє: {both_off_h}г"),
+        (80, 320, (34, 197, 94, 255), (34, 197, 94, 255), f"Всюди: {both_on_h}г"),
+        (345, 585, (59, 130, 246, 255), (59, 130, 246, 255), f"{alias_a[:5]}: {g1_only_h}г"),
+        (610, 850, (139, 92, 246, 255), (139, 92, 246, 255), f"{alias_b[:5]}: {g2_only_h}г" if not single_mode else f"Сіра: {uncertain_h}г"),
+        (875, 1120, COLOR_MAP_RGB["BOTH_OFF"], (75, 85, 99, 255), f"Відключення: {both_off_h}г"),
     ]
 
-    for px0, px1, accent_c, ptext in pills_config:
+    for px0, px1, badge_c, outline_c, ptext in pills_config:
         # Dark card body
-        draw.rounded_rectangle([(px0, 500), (px1, 580)], radius=12, fill=(30, 41, 59, 255), outline=accent_c, width=2)
-        # Colored badge chip spanning Y: 512..568, width 32px (guarantees sampling hits at Y=520, Y=560)
-        draw.rounded_rectangle([(px0 + 12, 515), (px0 + 44, 565)], radius=6, fill=accent_c)
+        draw.rounded_rectangle([(px0, 500), (px1, 580)], radius=12, fill=(30, 41, 59, 255), outline=outline_c, width=2)
+        # Colored badge chip matching timeline block color
+        draw.rounded_rectangle([(px0 + 12, 515), (px0 + 44, 565)], radius=6, fill=badge_c, outline=outline_c, width=1)
         draw.text((px0 + 52, 532), ptext, fill=(248, 250, 252, 255), font=font_metric)
 
     # 5. Output buffer: 144 DPI PNG
