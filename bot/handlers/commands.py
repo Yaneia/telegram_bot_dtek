@@ -190,6 +190,8 @@ async def cmd_start(
                     alias=slot_b.alias,
                 )
                 msg_lines.append(f"📍 <b>Слот 2:</b> {slot_b.alias} (Черга {slot_b.subgroup_id}, {reg_b})")
+            else:
+                await db.slots.delete_slot(user_id, 2)
 
             msg_lines.extend([
                 "",

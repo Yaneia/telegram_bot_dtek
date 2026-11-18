@@ -142,7 +142,7 @@
       </div>
 
       <p id="card-recommendation" class="text-xs text-slate-300 bg-slate-900/40 p-2 rounded border border-slate-800">
-        💡 Світло лише в Офісі — їдьте працювати або заряджатися туди.
+        💡 Світло є лише в Офісі.
       </p>
     </section>
 
@@ -921,20 +921,20 @@
           slotBStatusBox.classList.add('hidden');
         }
 
-        // Action Recommendation
+        // Status summary (no travel recommendations)
         const reco = document.getElementById('card-recommendation');
         if (appState.isEmergency || item.joint_status === 'EMERGENCY') {
-          reco.textContent = '🚨 Екстрені аварійні відключення! Графіки тимчасово не діють.';
+          reco.textContent = '🚨 Екстрені аварійні відключення.';
         } else if (item.joint_status === 'BOTH_ON') {
-          reco.textContent = '⚡️ Світло є в обох локаціях. Чудовий час для активних справ.';
+          reco.textContent = '⚡️ Світло є в обох локаціях.';
         } else if (item.joint_status === 'GROUP1_ONLY') {
-          reco.textContent = `💡 Світло є лише в "${appState.slotA.alias}" — залишайтесь або їдьте туди.`;
+          reco.textContent = `💡 Світло є лише в "${appState.slotA.alias}".`;
         } else if (item.joint_status === 'GROUP2_ONLY') {
-          reco.textContent = `💡 Світло є лише в "${appState.slotB.alias}" — їдьте працювати або заряджатися туди.`;
+          reco.textContent = `💡 Світло є лише в "${appState.slotB.alias}".`;
         } else if (item.joint_status === 'BOTH_OFF') {
-          reco.textContent = '⬛ Відключення в обох локаціях. Бережіть заряд акумуляторів.';
+          reco.textContent = '⬛ Світла немає в обох локаціях.';
         } else {
-          reco.textContent = '⚠️ Можливе відключення згідно з сірою зоною графіка.';
+          reco.textContent = '⚠️ Можливе відключення.';
         }
       }
 
@@ -1069,7 +1069,7 @@
           const subgrpB = slotB.subgroup || '1.1';
           const alB = slotB.alias || '';
 
-          for (const maxLen of [10, 6, 4, 2, 0]) {
+          for (const maxLen of [10, 8, 6, 4, 2, 0]) {
             const curA = alA.slice(0, maxLen);
             const curB = alB.slice(0, maxLen);
             const raw = `${regA}:${grpA}:${subgrpA}:${curA}|${regB}:${grpB}:${subgrpB}:${curB}`;
@@ -1162,6 +1162,7 @@
         }
 
         persistSlots({
+          bot_username: appState.botUsername,
           slot_a: {
             alias: appState.slotA.alias,
             region: appState.slotA.region,
@@ -1287,6 +1288,21 @@
             }
 
             payloadParsed = true;
+            persistSlots({
+              bot_username: appState.botUsername,
+              slot_a: {
+                alias: appState.slotA.alias,
+                region: appState.slotA.region,
+                group: appState.slotA.group,
+                subgroup: appState.slotA.subgroup
+              },
+              slot_b: appState.hasSlotB ? {
+                alias: appState.slotB.alias,
+                region: appState.slotB.region,
+                group: appState.slotB.group,
+                subgroup: appState.slotB.subgroup
+              } : null
+            });
           } catch (e) {
             payloadParsed = false;
           }
@@ -1295,6 +1311,9 @@
         // Tier 2: Standalone Fallback via CloudStorage & Mirror
         if (!payloadParsed) {
           const saved = await loadSavedSlots();
+          if (saved && saved.bot_username) {
+            appState.botUsername = saved.bot_username;
+          }
           if (saved && saved.slot_a) {
             appState.slotA.alias = saved.slot_a.alias || 'Дім';
             appState.slotA.region = saved.slot_a.region || 'kyiv';

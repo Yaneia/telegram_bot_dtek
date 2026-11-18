@@ -135,7 +135,11 @@ def build_slots_keyboard(slots: List[Any]) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=f"📍 Слот 1: {alias} ({subgroup})",
                     callback_data="slot_edit:1",
-                )
+                ),
+                InlineKeyboardButton(
+                    text="✏️ Назва",
+                    callback_data="slot_rename:1",
+                ),
             ])
         elif slot_num == 2:
             has_slot2 = True
@@ -145,7 +149,11 @@ def build_slots_keyboard(slots: List[Any]) -> InlineKeyboardMarkup:
                     callback_data="slot_edit:2",
                 ),
                 InlineKeyboardButton(
-                    text="🗑 Видалити Слот 2",
+                    text="✏️ Назва",
+                    callback_data="slot_rename:2",
+                ),
+                InlineKeyboardButton(
+                    text="🗑 Видалити",
                     callback_data="slot_delete:2",
                 ),
             ])

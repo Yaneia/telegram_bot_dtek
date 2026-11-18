@@ -32,10 +32,19 @@ logger = logging.getLogger(__name__)
 # Aiogram 3.15+ imports with fallback stubs
 try:
     from aiogram import F, Router  # type: ignore[import-untyped]
+    from aiogram.fsm.context import FSMContext  # type: ignore[import-untyped]
+    from aiogram.fsm.state import State, StatesGroup  # type: ignore[import-untyped]
     from aiogram.types import CallbackQuery, Message  # type: ignore[import-untyped]
     _AIOGRAM_AVAILABLE = True
 except ImportError:
     _AIOGRAM_AVAILABLE = False
+    FSMContext = Any  # type: ignore[assignment,misc]
+
+    class StatesGroup:  # type: ignore[no-redef]
+        pass
+
+    class State:  # type: ignore[no-redef]
+        pass
 
     class _MagicFilter:
         def __init__(self, path: str = "") -> None:
@@ -275,7 +284,8 @@ async def cb_slot_subgroup(
     group_id = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 1
     subgroup_id = parts[4] if len(parts) > 4 else f"{group_id}.1"
 
-    alias = "Дім" if slot_num == 1 else "Офіс"
+    existing = await db.slots.get_slot(user_id, slot_num)
+    alias = existing.alias if (existing and existing.alias) else ("Дім" if slot_num == 1 else "Офіс")
 
     await db.slots.upsert_slot(
         user_id=user_id,
@@ -306,6 +316,101 @@ async def cb_slot_subgroup(
             await query.answer("Чергу успішно збережено! ✅")
         except Exception:
             pass
+
+
+class SlotRenameState(StatesGroup):
+    """FSM state for renaming a user's outage slot inline."""
+
+    waiting_for_alias = State()
+
+
+@router.callback_query(F.data.startswith("slot_rename:"))
+async def cb_slot_rename(
+    query: Any,
+    state: Optional[FSMContext] = None,
+    **kwargs: Any,
+) -> None:
+    """Prompt user to enter a custom name for the selected slot."""
+    data = getattr(query, "data", "") or ""
+    parts = data.split(":")
+    slot_num = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+
+    if state is not None and hasattr(state, "set_state"):
+        await state.update_data(rename_slot_num=slot_num)
+        await state.set_state(SlotRenameState.waiting_for_alias)
+
+    text = (
+        f"✏️ <b>Нова назва для Слота {slot_num}</b>\n\n"
+        "Надішліть нову назву (до 16 символів, наприклад: <i>Квартира</i> або <i>Робота</i>).\n"
+        "Для скасування надішліть /cancel."
+    )
+    msg = getattr(query, "message", None)
+    await _edit_or_answer(msg, text, parse_mode="HTML")
+
+    if hasattr(query, "answer"):
+        try:
+            await query.answer()
+        except Exception:
+            pass
+
+
+@router.message(SlotRenameState.waiting_for_alias)
+async def msg_slot_rename(
+    message: Any,
+    state: Optional[FSMContext] = None,
+    db: Optional[DatabaseRepository] = None,
+    **kwargs: Any,
+) -> None:
+    """Save new custom alias for the slot from user's text message."""
+    raw_text = (getattr(message, "text", None) or "").strip()
+    if raw_text.lower().startswith("/cancel"):
+        if state is not None and hasattr(state, "clear"):
+            await state.clear()
+        if hasattr(message, "answer"):
+            await message.answer("Перейменування скасовано.")
+        return
+
+    new_alias = raw_text[:16]
+    if not new_alias:
+        if hasattr(message, "answer"):
+            await message.answer("Назва не може бути порожньою. Введіть назву до 16 символів або /cancel:")
+        return
+
+    slot_num = 1
+    if state is not None and hasattr(state, "get_data"):
+        fsm_data = await state.get_data()
+        slot_num = int(fsm_data.get("rename_slot_num", 1))
+        await state.clear()
+
+    if db is None:
+        db = await _get_db()
+
+    user = getattr(message, "from_user", None)
+    user_id = getattr(user, "id", 0) if user else 0
+
+    existing = await db.slots.get_slot(user_id, slot_num)
+    if existing is None:
+        if hasattr(message, "answer"):
+            await message.answer(f"Слот {slot_num} ще не налаштовано. Спочатку оберіть регіон та чергу через /slots.")
+        return
+
+    reg_val = existing.region_code.value if hasattr(existing.region_code, "value") else str(existing.region_code)
+    await db.slots.upsert_slot(
+        user_id=user_id,
+        slot_number=slot_num,
+        region_code=reg_val,
+        group_id=existing.group_id,
+        subgroup_id=existing.subgroup_id,
+        alias=new_alias,
+    )
+
+    slots = await db.slots.get_slots_for_user(user_id)
+    if hasattr(message, "answer"):
+        await message.answer(
+            f"✅ Назву <b>Слота {slot_num}</b> змінено на <b>{new_alias}</b>.",
+            parse_mode="HTML",
+            reply_markup=build_slots_keyboard(slots),
+        )
 
 
 @router.callback_query(F.data.startswith("slot_delete:"))
