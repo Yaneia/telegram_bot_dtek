@@ -26,6 +26,7 @@ LABEL org.opencontainers.image.title="Ukrainian Electricity Outage Tracker (DTEK
 LABEL org.opencontainers.image.description="Outbound-only Telegram bot for DTEK electricity outage schedules"
 LABEL org.opencontainers.image.authors="Artem Yaneia <artem@yaneia.me>"
 LABEL org.opencontainers.image.source="https://github.com/Yaneia/telegram_bot_dtek"
+LABEL org.opencontainers.image.licenses="MIT"
 
 # Runtime environment settings
 ENV PYTHONUNBUFFERED=1 \

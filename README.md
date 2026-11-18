@@ -97,6 +97,6 @@ The test suite is fully offline and uses deterministic fixtures.
 .venv/bin/python -m pytest
 ```
 
-## Author
+## License
 
-**Artem Yaneia** — [artem@yaneia.me](mailto:artem@yaneia.me)
+[MIT](LICENSE)

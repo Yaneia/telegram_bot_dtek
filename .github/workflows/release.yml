@@ -1,0 +1,52 @@
+name: Auto Release (GitVersion)
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "schedules/**"
+      - "README.md"
+      - "LICENSE"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: "!startsWith(github.event.head_commit.message, 'chore: update DTEK schedules') && github.actor != 'github-actions[bot]'"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup GitVersion
+        uses: gittools/actions/gitversion/setup@v3
+        with:
+          versionSpec: "6.x"
+
+      - name: Determine SemVer
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v3
+
+      - name: Check if tag already exists
+        id: tag_check
+        run: |
+          TAG="v${{ steps.gitversion.outputs.majorMinorPatch }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        if: steps.tag_check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_check.outputs.tag }}
+          name: ${{ steps.tag_check.outputs.tag }}
+          generate_release_notes: true

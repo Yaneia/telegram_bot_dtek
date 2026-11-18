@@ -1,0 +1,37 @@
+workflow: TrunkBased/v1
+tag-prefix: '[vV]?'
+mode: ContinuousDelivery
+commit-message-incrementing: Enabled
+major-version-bump-message: '\+semver:\s?(breaking|major)|BREAKING CHANGE:'
+minor-version-bump-message: '\+semver:\s?(feature|minor)|^feat(\([^)]+\))?:'
+patch-version-bump-message: '\+semver:\s?(fix|patch)|^fix(\([^)]+\))?:'
+no-bump-message: '\+semver:\s?(none|skip)|^chore\(schedules\):|^chore: update DTEK schedules'
+
+branches:
+  main:
+    regex: ^main$
+    label: ''
+    increment: Patch
+    prevent-increment:
+      of-merged-branch: true
+    track-merge-target: false
+    is-main-branch: true
+    is-release-branch: false
+  feature:
+    regex: ^(feat|feature|fix)[/-]
+    label: '{BranchName}'
+    increment: Inherit
+    source-branches:
+      - main
+    is-main-branch: false
+    is-release-branch: false
+  pull-request:
+    regex: ^(pull|pull\-requests|pr)[/-]
+    label: PullRequest
+    increment: Inherit
+    label-number-pattern: '[/-](?<number>\d+)'
+    source-branches:
+      - main
+      - feature
+ignore:
+  sha: []
