@@ -1,0 +1,40 @@
+# Podman Compose / Docker Compose specification
+# Hardened rootless deployment for Ukrainian Outage Tracker Telegram Bot
+
+services:
+  dtek-bot:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: dtek-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+
+    # Hardened filesystem security: read-only rootfs + volatile tmpfs
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+
+    # Persistent SQLite database storage with Podman SELinux relabeling (:Z)
+    volumes:
+      - ./data:/app/data:Z
+
+    # Resource constraints tailored for consumer routers and NAS devices
+    mem_limit: 256m
+    cpus: "0.5"
+
+    # Rotating logs to prevent storage exhaustion
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+    # Healthcheck monitoring SQLite connectivity and polling loop heartbeat
+    healthcheck:
+      test: ["CMD", "python", "-m", "bot.healthcheck"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="uk" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="author" content="Artem Yaneia, artem@yaneia.me">
+  <title>Графік відключень світла ДТЕК</title>
+  
+  <!-- Telegram WebApp JS SDK v7.10+ -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              on: '#22C55E',
+              off: '#1E293B',
+              g1: '#3B82F6',
+              g2: '#A855F7',
+              maybe: '#F59E0B',
+              emergency: '#EF4444'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  
+  <!-- Pako v2.1.0 CDN for zlib inflate -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+
+  <style>
+    :root {
+      --bg-color: var(--tg-theme-bg-color, #0f172a);
+      --text-color: var(--tg-theme-text-color, #f8fafc);
+      --hint-color: var(--tg-theme-hint-color, #94a3b8);
+      --btn-color: var(--tg-theme-button-color, #3b82f6);
+      --btn-text: var(--tg-theme-button-text-color, #ffffff);
+      --sec-bg: var(--tg-theme-secondary-bg-color, #1e293b);
+    }
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      min-height: var(--tg-viewport-stable-height, 100vh);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      touch-action: pan-y;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      height: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: rgba(30, 41, 59, 0.5);
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="flex flex-col select-none antialiased text-sm pb-8">
+
+  <!-- Header Zone -->
+  <header class="p-4 border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-30 flex flex-col gap-2">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-xl">⚡️</span>
+        <div>
+          <h1 class="font-bold text-base tracking-tight text-white flex items-center gap-1.5">
+            ДТЕК Графік
+            <span id="date-badge" class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">2026-11-11</span>
+          </h1>
+        </div>
+      </div>
+      <button id="btn-settings-toggle" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-1 text-xs">
+        <span>⚙️</span>
+        <span class="hidden sm:inline">Налаштування</span>
+      </button>
+    </div>
+
+    <!-- Banner Alerts Zone -->
+    <div id="emergency-banner" class="hidden p-2.5 rounded-lg bg-red-950/80 border border-red-600 text-red-200 font-medium text-xs flex items-center gap-2">
+      <span class="text-base animate-pulse">🚨</span>
+      <span id="emergency-text">УВАГА: АВАРІЙНІ ВІДКЛЮЧЕННЯ! Графіки тимчасово не діють.</span>
+    </div>
+
+    <div id="stale-banner" class="hidden p-2 rounded-lg bg-amber-950/70 border border-amber-600 text-amber-200 text-xs flex items-center gap-2">
+      <span>⚠️</span>
+      <span>Дані можуть бути застарілими. Оновлюється за розкладом.</span>
+    </div>
+
+    <div id="demo-banner" class="hidden p-2 rounded-lg bg-blue-950/70 border border-blue-500 text-blue-200 text-xs flex items-center justify-between">
+      <span>ℹ️ Демонстраційний режим. Надішліть /schedule у боті для свіжих даних.</span>
+    </div>
+
+    <!-- Active Slots Badges -->
+    <div class="flex flex-wrap items-center gap-2 pt-1">
+      <div id="badge-slot-a" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-950/80 border border-blue-700 text-blue-300 font-medium text-xs">
+        <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+        <span id="badge-slot-a-text">Дім (Київ: Черга 1.1)</span>
+      </div>
+      <div id="badge-slot-b" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-950/80 border border-purple-700 text-purple-300 font-medium text-xs">
+        <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+        <span id="badge-slot-b-text">Офіс (Київ: Черга 3.2)</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col gap-4">
+
+    <!-- Interactive Decision Card (Tooltip) -->
+    <section id="decision-card" class="p-4 rounded-xl bg-slate-800/90 border border-slate-700 shadow-lg flex flex-col gap-2 transition-all">
+      <div class="flex items-center justify-between border-b border-slate-700/60 pb-2">
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">Інтервал</span>
+          <span id="card-time-interval" class="font-mono font-bold text-base text-white">14:00 – 14:30</span>
+          <span id="card-is-now" class="text-[10px] px-1.5 py-0.5 rounded bg-red-600 text-white uppercase font-bold tracking-wider">Зараз</span>
+        </div>
+        <div id="card-joint-badge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-900/60 text-purple-300 border border-purple-600">
+          Світло лише у [Slot 2]
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div id="card-slot-a-status" class="p-2 rounded bg-slate-900/70 border border-slate-700/80 flex items-center justify-between">
+          <span id="card-slot-a-alias" class="font-medium text-slate-300">Дім</span>
+          <span id="card-slot-a-state" class="font-bold text-red-400">⬛ Немає</span>
+        </div>
+        <div id="card-slot-b-status" class="p-2 rounded bg-slate-900/70 border border-slate-700/80 flex items-center justify-between">
+          <span id="card-slot-b-alias" class="font-medium text-slate-300">Офіс</span>
+          <span id="card-slot-b-state" class="font-bold text-green-400">🟩 Є світло</span>
+        </div>
+      </div>
+
+      <p id="card-recommendation" class="text-xs text-slate-300 bg-slate-900/40 p-2 rounded border border-slate-800">
+        💡 Світло лише в Офісі — їдьте працювати або заряджатися туди.
+      </p>
+    </section>
+
+    <!-- Timeline Ribbon Visualization -->
+    <section class="rounded-xl bg-slate-900 border border-slate-800 p-3 shadow-md flex flex-col gap-2">
+      <div class="flex items-center justify-between text-xs text-slate-400 px-1">
+        <span class="font-semibold uppercase tracking-wider text-slate-300">Хронологія 48 інтервалів (00:00 – 24:00)</span>
+        <span class="text-[11px] text-slate-400">Проведіть пальцем для вибору часу</span>
+      </div>
+
+      <!-- Scrollable container for Ribbon -->
+      <div id="ribbon-scroll-container" class="relative overflow-x-auto custom-scroll pb-2 pt-4 cursor-ew-resize">
+        <div id="ribbon-viewport" class="relative min-w-[768px] sm:min-w-full flex flex-col gap-1.5 select-none py-2">
+          
+          <!-- Scrubber Indicator (vertical guideline bar) -->
+          <div id="scrubber-cursor" class="absolute top-0 bottom-0 w-0.5 bg-white/90 z-20 pointer-events-none transition-[left] duration-75 hidden" style="left: 0px;">
+            <div class="absolute -top-3.5 -translate-x-1/2 px-1.5 py-0.5 rounded bg-white text-slate-900 text-[10px] font-bold font-mono shadow">
+              <span id="scrubber-cursor-time">14:00</span>
+            </div>
+          </div>
+
+          <!-- Dynamic "Now" Needle -->
+          <div id="now-needle" class="absolute top-0 bottom-0 w-[2px] bg-red-500 z-20 pointer-events-none shadow-[0_0_8px_rgba(239,68,68,0.8)]" style="left: 50%;">
+            <div class="absolute -top-3.5 -translate-x-1/2 px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider shadow">
+              ЗАРАЗ
+            </div>
+          </div>
+
+          <!-- Lane 1: Slot A -->
+          <div class="flex items-center gap-2">
+            <span id="lane-a-label" class="w-12 text-[11px] font-medium text-slate-400 truncate text-right">Дім</span>
+            <div id="lane-a-blocks" class="flex-1 grid grid-cols-48 h-6 rounded-md overflow-hidden bg-slate-950 border border-slate-800">
+              <!-- 48 blocks generated dynamically -->
+            </div>
+          </div>
+
+          <!-- Lane 2: Slot B (Hidden if single-slot) -->
+          <div id="lane-b-row" class="flex items-center gap-2">
+            <span id="lane-b-label" class="w-12 text-[11px] font-medium text-slate-400 truncate text-right">Офіс</span>
+            <div id="lane-b-blocks" class="flex-1 grid grid-cols-48 h-6 rounded-md overflow-hidden bg-slate-950 border border-slate-800">
+              <!-- 48 blocks generated dynamically -->
+            </div>
+          </div>
+
+          <!-- Lane 3: Joint Opportunity Ribbon -->
+          <div class="flex items-center gap-2 pt-0.5">
+            <span class="w-12 text-[11px] font-bold text-amber-400 truncate text-right flex items-center justify-end gap-0.5">
+              <span>⚡️</span><span>Спільне</span>
+            </span>
+            <div id="lane-joint-blocks" class="flex-1 grid grid-cols-48 h-7 rounded-md overflow-hidden bg-slate-950 border border-slate-800">
+              <!-- 48 joint blocks generated dynamically -->
+            </div>
+          </div>
+
+          <!-- Time Guideline Ticks Axis (Every 2 hours) -->
+          <div class="flex items-center gap-2 pt-1 text-[10px] text-slate-500 font-mono">
+            <span class="w-12"></span>
+            <div class="flex-1 flex justify-between px-1">
+              <span>00</span><span>02</span><span>04</span><span>06</span><span>08</span><span>10</span>
+              <span>12</span><span>14</span><span>16</span><span>18</span><span>20</span><span>22</span><span>24</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Daily Summary Metrics Cards -->
+    <section class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 flex flex-col gap-1">
+        <span class="text-xs text-slate-400 flex items-center gap-1">
+          <span class="text-green-500">🟢</span> Світло всюди
+        </span>
+        <span id="metric-both-on" class="font-bold text-lg text-green-400 font-mono">12.0 год</span>
+      </div>
+
+      <div id="metric-box-g1" class="p-3 rounded-xl bg-slate-900 border border-slate-800 flex flex-col gap-1">
+        <span class="text-xs text-slate-400 flex items-center gap-1">
+          <span class="text-blue-500">🔵</span> <span id="metric-label-g1">Лише Дім</span>
+        </span>
+        <span id="metric-group1-only" class="font-bold text-lg text-blue-400 font-mono">6.0 год</span>
+      </div>
+
+      <div id="metric-box-g2" class="p-3 rounded-xl bg-slate-900 border border-slate-800 flex flex-col gap-1">
+        <span class="text-xs text-slate-400 flex items-center gap-1">
+          <span class="text-purple-500">🟣</span> <span id="metric-label-g2">Лише Офіс</span>
+        </span>
+        <span id="metric-group2-only" class="font-bold text-lg text-purple-400 font-mono">6.0 год</span>
+      </div>
+
+      <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 flex flex-col gap-1">
+        <span class="text-xs text-slate-400 flex items-center gap-1">
+          <span class="text-slate-500">⬛</span> Блекаут
+        </span>
+        <span id="metric-both-off" class="font-bold text-lg text-slate-300 font-mono">0.0 год</span>
+      </div>
+    </section>
+
+    <!-- Transition Countdown Card -->
+    <section id="transition-card" class="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+      <div class="flex items-center gap-2 text-slate-300">
+        <span class="text-base">⏳</span>
+        <span>Наступна зміна графіка:</span>
+        <span id="next-transition-time" class="font-bold font-mono text-white">18:00</span>
+      </div>
+      <div id="next-transition-countdown" class="font-semibold text-amber-400 font-mono">
+        через 3 год 45 хв
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Settings Drawer / Modal -->
+  <div id="settings-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 flex flex-col gap-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h2 class="text-base font-bold text-white flex items-center gap-2">
+          <span>⚙️</span> Налаштування локацій
+        </h2>
+        <button id="btn-close-settings" class="text-slate-400 hover:text-white text-lg p-1">✕</button>
+      </div>
+
+      <!-- Slot 1 Configuration -->
+      <div class="flex flex-col gap-2 p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-blue-400 text-xs flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Локація 1 (Основна)
+          </span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">Назва / Аліас</label>
+            <input type="text" id="input-slot-a-alias" maxlength="16" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white" value="Дім">
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">Регіон ДТЕК</label>
+            <select id="select-slot-a-region" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white">
+              <option value="kyiv">м. Київ</option>
+              <option value="kyiv-region">Київська обл.</option>
+              <option value="dnipro">Дніпро</option>
+              <option value="odesa">Одеса</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">Група (Черга)</label>
+            <select id="select-slot-a-group" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white">
+              <option value="1">Група 1</option>
+              <option value="2">Група 2</option>
+              <option value="3">Група 3</option>
+              <option value="4">Група 4</option>
+              <option value="5">Група 5</option>
+              <option value="6">Група 6</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">Підгрупа</label>
+            <select id="select-slot-a-subgroup" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white">
+              <option value="1.1">Підгрупа 1 (.1)</option>
+              <option value="1.2">Підгрупа 2 (.2)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slot 2 Configuration -->
+      <div class="flex flex-col gap-2 p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-purple-400 text-xs flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span> Локація 2 (Порівняння)
+          </span>
+          <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" id="check-enable-slot-b" class="rounded bg-slate-900 border-slate-700" checked>
+            <span>Увімкнено</span>
+          </label>
+        </div>
+        <div id="slot-b-inputs" class="flex flex-col gap-2">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Назва / Аліас</label>
+              <input type="text" id="input-slot-b-alias" maxlength="16" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white" value="Офіс">
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Регіон ДТЕК</label>
+              <select id="select-slot-b-region" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white">
+                <option value="kyiv">м. Київ</option>
+                <option value="kyiv-region">Київська обл.</option>
+                <option value="dnipro">Дніпро</option>
+                <option value="odesa">Одеса</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Група (Черга)</label>
+              <select id="select-slot-b-group" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white">
+                <option value="1">Група 1</option>
+                <option value="2">Група 2</option>
+                <option value="3" selected>Група 3</option>
+                <option value="4">Група 4</option>
+                <option value="5">Група 5</option>
+                <option value="6">Група 6</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Підгрупа</label>
+              <select id="select-slot-b-subgroup" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white">
+                <option value="3.1">Підгрупа 1 (.1)</option>
+                <option value="3.2" selected>Підгрупа 2 (.2)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex flex-col gap-2 pt-2">
+        <button id="btn-save-settings" class="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 font-semibold text-white text-xs transition-colors shadow">
+          💾 Зберегти локально
+        </button>
+        <button id="btn-sync-bot" class="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 font-medium text-slate-200 text-xs transition-colors flex items-center justify-center gap-1.5 border border-slate-700">
+          <span>📲</span> Синхронізувати з ботом (Deep-Link)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client JavaScript Application Logic -->
+  <script>
+    (function () {
+      'use strict';
+
+      // =========================================================================
+      // 1. CONSTANTS & DOMAIN MATRICES
+      // =========================================================================
+      const COMBINATORIAL_MATRIX = {
+        'ON,ON': { status: 'BOTH_ON', color: '#22C55E', label: 'Світло всюди' },
+        'ON,OFF': { status: 'GROUP1_ONLY', color: '#3B82F6', label: 'Світло лише у [Slot 1]' },
+        'OFF,ON': { status: 'GROUP2_ONLY', color: '#A855F7', label: 'Світло лише у [Slot 2]' },
+        'OFF,OFF': { status: 'BOTH_OFF', color: '#1E293B', label: 'Світла немає ніде' },
+        'ON,MAYBE': { status: 'GROUP1_ON_GROUP2_MAYBE', color: '#059669', label: '[Slot 1] Є, [Slot 2] Можливо' },
+        'MAYBE,ON': { status: 'GROUP1_MAYBE_GROUP2_ON', color: '#7C3AED', label: '[Slot 1] Можливо, [Slot 2] Є' },
+        'OFF,MAYBE': { status: 'GROUP1_OFF_GROUP2_MAYBE', color: '#4B5563', label: '[Slot 1] Немає, [Slot 2] Можливо' },
+        'MAYBE,OFF': { status: 'GROUP1_MAYBE_GROUP2_OFF', color: '#374151', label: '[Slot 1] Можливо, [Slot 2] Немає' },
+        'MAYBE,MAYBE': { status: 'BOTH_MAYBE', color: '#F59E0B', label: 'Можливе відключення всюди' }
+      };
+
+      const STATUS_COLORS = {
+        'ON': '#22C55E',
+        'OFF': '#1E293B',
+        'MAYBE': '#F59E0B',
+        'EMERGENCY': '#EF4444',
+        'BOTH_ON': '#22C55E',
+        'GROUP1_ONLY': '#3B82F6',
+        'GROUP2_ONLY': '#A855F7',
+        'BOTH_OFF': '#1E293B',
+        'BOTH_MAYBE': '#F59E0B'
+      };
+
+      const TRUTH_TABLE = {
+        'yes': ['ON', 'ON'],
+        'no': ['OFF', 'OFF'],
+        'first': ['OFF', 'ON'],
+        'second': ['ON', 'OFF'],
+        'maybe': ['MAYBE', 'MAYBE'],
+        'mfirst': ['MAYBE', 'ON'],
+        'msecond': ['ON', 'MAYBE']
+      };
+
+      const REGION_NAMES = {
+        'kyiv': 'м. Київ',
+        'kyiv-region': 'Київська обл.',
+        'dnipro': 'Дніпро',
+        'odesa': 'Одеса'
+      };
+
+      // =========================================================================
+      // 2. STATE REPOSITORY
+      // =========================================================================
+      const appState = {
+        botUsername: 'dtek_bot',
+        comparisonDate: new Date().toISOString().slice(0, 10),
+        isEmergency: false,
+        stale: false,
+        slotA: {
+          alias: 'Дім',
+          region: 'kyiv',
+          group: 1,
+          subgroup: '1.1',
+          sched: Array(48).fill('ON')
+        },
+        slotB: {
+          alias: 'Офіс',
+          region: 'kyiv',
+          group: 3,
+          subgroup: '3.2',
+          sched: Array(48).fill('ON')
+        },
+        hasSlotB: true,
+        timeline: [],
+        metrics: {
+          bothOnHours: 0,
+          group1OnlyHours: 0,
+          group2OnlyHours: 0,
+          bothOffHours: 0,
+          uncertainHours: 0
+        },
+        scrubbedIndex: null,
+        isTouchDragging: false
+      };
+
+      // =========================================================================
+      // 3. TELEGRAM WEBAPP SDK INITIALIZATION
+      // =========================================================================
+      const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+      if (tg) {
+        try {
+          tg.ready();
+          tg.expand();
+          if (typeof tg.enableClosingConfirmation === 'function') {
+            tg.enableClosingConfirmation();
+          }
+          if (tg.colorScheme) {
+            document.documentElement.className = tg.colorScheme;
+          }
+          tg.onEvent('themeChanged', () => {
+            if (tg.colorScheme) {
+              document.documentElement.className = tg.colorScheme;
+            }
+          });
+        } catch (e) {}
+      }
+
+      function triggerHaptic(type) {
+        if (!tg || !tg.HapticFeedback) return;
+        try {
+          if (type === 'selection') tg.HapticFeedback.selectionChanged();
+          else if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+          else if (type === 'warning') tg.HapticFeedback.notificationOccurred('warning');
+        } catch (e) {}
+      }
+
+      // =========================================================================
+      // 4. STORAGE ACCESS (CloudStorage with localStorage fallback)
+      // =========================================================================
+      function loadSavedSlots() {
+        return new Promise((resolve) => {
+          if (tg && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
+            try {
+              tg.CloudStorage.getItem('dtek_slots_v1', (err, val) => {
+                if (!err && val) {
+                  try {
+                    resolve(JSON.parse(val));
+                    return;
+                  } catch (e) {}
+                }
+                fallbackLocal();
+              });
+              return;
+            } catch (e) {
+              fallbackLocal();
+              return;
+            }
+          }
+          fallbackLocal();
+
+          function fallbackLocal() {
+            try {
+              const local = localStorage.getItem('dtek_slots_v1');
+              if (local) {
+                resolve(JSON.parse(local));
+                return;
+              }
+            } catch (e) {}
+            resolve(null);
+          }
+        });
+      }
+
+      function persistSlots(config) {
+        const jsonStr = JSON.stringify(config);
+        try {
+          localStorage.setItem('dtek_slots_v1', jsonStr);
+        } catch (e) {}
+        if (tg && tg.CloudStorage && typeof tg.CloudStorage.setItem === 'function') {
+          try {
+            tg.CloudStorage.setItem('dtek_slots_v1', jsonStr, () => {});
+          } catch (e) {}
+        }
+      }
+
+      // =========================================================================
+      // 5. DECOMPRESSION ENGINE (#p= URL Fragment Decoder)
+      // =========================================================================
+      function base64urlToBytes(raw) {
+        const clean = raw.split('?')[0].split('&')[0].trim();
+        const padding = '='.repeat((4 - (clean.length % 4)) % 4);
+        const b64 = (clean + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const binStr = atob(b64);
+        const bytes = new Uint8Array(binStr.length);
+        for (let i = 0; i < binStr.length; i++) {
+          bytes[i] = binStr.charCodeAt(i);
+        }
+        return bytes;
+      }
+
+      async function decompressZlibBytes(bytes) {
+        if (typeof window.pako !== 'undefined' && window.pako.inflate) {
+          const decompressed = window.pako.inflate(bytes);
+          return new TextDecoder('utf-8').decode(decompressed);
+        }
+        if (typeof window.DecompressionStream !== 'undefined') {
+          const ds = new DecompressionStream('deflate');
+          const writer = ds.writable.getWriter();
+          writer.write(bytes);
+          writer.close();
+          const reader = ds.readable.getReader();
+          const chunks = [];
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+          }
+          const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
+          const result = new Uint8Array(totalLen);
+          let offset = 0;
+          for (const c of chunks) {
+            result.set(c, offset);
+            offset += c.length;
+          }
+          return new TextDecoder('utf-8').decode(result);
+        }
+        throw new Error('Neither pako nor DecompressionStream available');
+      }
+
+      function charToStatus(c) {
+        if (!c) return 'MAYBE';
+        const u = String(c).toUpperCase();
+        if (u === 'O' || u === 'ON') return 'ON';
+        if (u === 'X' || u === 'OFF') return 'OFF';
+        if (u === 'M' || u === 'MAYBE') return 'MAYBE';
+        if (u === 'E' || u === 'EMERGENCY') return 'EMERGENCY';
+        return 'MAYBE';
+      }
+
+      function parseScheduleString(sched) {
+        if (typeof sched === 'string') {
+          return Array.from(sched).slice(0, 48).map(charToStatus);
+        }
+        if (Array.isArray(sched)) {
+          return sched.slice(0, 48).map(item => {
+            if (typeof item === 'string') return charToStatus(item);
+            if (item && item.status) return charToStatus(item.status);
+            return 'MAYBE';
+          });
+        }
+        return Array(48).fill('MAYBE');
+      }
+
+      // =========================================================================
+      // 6. CLIENT-SIDE 7-STATUS NORMALIZER & MIRROR RETRIEVER
+      // =========================================================================
+      function normalizeHoursDict(hoursDict, isEmergency) {
+        if (isEmergency) return Array(48).fill('EMERGENCY');
+        const res = [];
+        for (let h = 1; h <= 24; h++) {
+          const raw = hoursDict ? (hoursDict[h] || hoursDict[String(h)] || '') : '';
+          const clean = String(raw).trim().toLowerCase();
+          const pair = TRUTH_TABLE[clean] || ['MAYBE', 'MAYBE'];
+          res.push(pair[0], pair[1]);
+        }
+        return res;
+      }
+
+      async function fetchMirrorSchedule(region, subgroup) {
+        const url = `https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data/${region}.json`;
+        const resp = await fetch(url, { cache: 'no-store' });
+        if (!resp.ok) throw new Error(`Mirror fetch failed: HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        const isEmergency = Boolean(data.is_emergency);
+        const gpvKey = `GPV${subgroup}`;
+
+        if (data.groups && data.groups[gpvKey] && Array.isArray(data.groups[gpvKey].slots)) {
+          return {
+            date: data.date || appState.comparisonDate,
+            isEmergency,
+            stale: false,
+            sched: data.groups[gpvKey].slots.map(s => charToStatus(s.status))
+          };
+        }
+
+        if (data.schedule && data.schedule[subgroup]) {
+          return {
+            date: data.date || appState.comparisonDate,
+            isEmergency,
+            stale: false,
+            sched: normalizeHoursDict(data.schedule[subgroup], isEmergency)
+          };
+        }
+
+        return {
+          date: data.date || appState.comparisonDate,
+          isEmergency,
+          stale: false,
+          sched: Array(48).fill('ON')
+        };
+      }
+
+      // =========================================================================
+      // 7. TIMEZONE & TIME UTILITIES (Europe/Kyiv)
+      // =========================================================================
+      function getKyivTime() {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Europe/Kyiv',
+          hour12: false,
+          year: 'numeric',
+          month: 'numeric',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: 'numeric',
+          second: 'numeric'
+        });
+        const parts = formatter.formatToParts(new Date());
+        const getPart = type => parseInt(parts.find(p => p.type === type).value, 10);
+        const hour = getPart('hour');
+        return {
+          hour: hour === 24 ? 0 : hour,
+          minute: getPart('minute'),
+          second: getPart('second')
+        };
+      }
+
+      function formatIntervalTimes(idx) {
+        const startMin = idx * 30;
+        const endMin = (idx + 1) * 30;
+        const sh = Math.floor(startMin / 60);
+        const sm = startMin % 60;
+        const eh = Math.floor(endMin / 60);
+        const em = endMin % 60;
+        const startStr = `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
+        const endStr = endMin === 1440 ? '24:00' : `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+        return { startStr, endStr };
+      }
+
+      // =========================================================================
+      // 8. 3x3 COMBINATORIAL ENGINE & TIMELINE GENERATION
+      // =========================================================================
+      function evaluateIntervalPair(stA, stB, isEmergency) {
+        if (isEmergency || stA === 'EMERGENCY' || stB === 'EMERGENCY') {
+          return { status: 'EMERGENCY', color: '#EF4444', label: 'Аварійні відключення' };
+        }
+        if (!stB) {
+          if (stA === 'ON') return { status: 'BOTH_ON', color: '#22C55E', label: 'Світло є' };
+          if (stA === 'OFF') return { status: 'BOTH_OFF', color: '#1E293B', label: 'Відключення' };
+          return { status: 'BOTH_MAYBE', color: '#F59E0B', label: 'Можливо' };
+        }
+        const key = `${stA},${stB}`;
+        return COMBINATORIAL_MATRIX[key] || { status: 'BOTH_MAYBE', color: '#F59E0B', label: 'Можливо' };
+      }
+
+      function computeTimeline() {
+        const intervals = [];
+        let bothOn = 0;
+        let g1Only = 0;
+        let g2Only = 0;
+        let bothOff = 0;
+        let uncertain = 0;
+
+        for (let i = 0; i < 48; i++) {
+          const stA = appState.slotA.sched[i] || 'MAYBE';
+          const stB = appState.hasSlotB ? (appState.slotB.sched[i] || 'MAYBE') : null;
+          const joint = evaluateIntervalPair(stA, stB, appState.isEmergency);
+          const { startStr, endStr } = formatIntervalTimes(i);
+
+          intervals.push({
+            slot_index: i,
+            start_time: startStr,
+            end_time: endStr,
+            status_a: stA,
+            status_b: stB,
+            joint_status: joint.status,
+            color: joint.color,
+            label: joint.label
+          });
+
+          if (joint.status === 'BOTH_ON') bothOn += 0.5;
+          else if (joint.status === 'GROUP1_ONLY') g1Only += 0.5;
+          else if (joint.status === 'GROUP2_ONLY') g2Only += 0.5;
+          else if (joint.status === 'BOTH_OFF') bothOff += 0.5;
+          else uncertain += 0.5;
+        }
+
+        appState.timeline = intervals;
+        appState.metrics = {
+          bothOnHours: bothOn,
+          group1OnlyHours: g1Only,
+          group2OnlyHours: g2Only,
+          bothOffHours: bothOff,
+          uncertainHours: uncertain
+        };
+      }
+
+      // =========================================================================
+      // 9. UI RENDERER
+      // =========================================================================
+      function renderApp() {
+        document.getElementById('date-badge').textContent = appState.comparisonDate;
+
+        const emBanner = document.getElementById('emergency-banner');
+        if (appState.isEmergency) emBanner.classList.remove('hidden');
+        else emBanner.classList.add('hidden');
+
+        const staleBanner = document.getElementById('stale-banner');
+        if (appState.stale) staleBanner.classList.remove('hidden');
+        else staleBanner.classList.add('hidden');
+
+        const badgeA = document.getElementById('badge-slot-a-text');
+        badgeA.textContent = `${appState.slotA.alias} (${REGION_NAMES[appState.slotA.region] || appState.slotA.region}: Черга ${appState.slotA.subgroup})`;
+
+        const badgeBBox = document.getElementById('badge-slot-b');
+        const badgeBText = document.getElementById('badge-slot-b-text');
+        const laneBRow = document.getElementById('lane-b-row');
+        const metricBoxG2 = document.getElementById('metric-box-g2');
+
+        if (appState.hasSlotB) {
+          badgeBBox.classList.remove('hidden');
+          badgeBText.textContent = `${appState.slotB.alias} (${REGION_NAMES[appState.slotB.region] || appState.slotB.region}: Черга ${appState.slotB.subgroup})`;
+          laneBRow.classList.remove('hidden');
+          metricBoxG2.classList.remove('hidden');
+        } else {
+          badgeBBox.classList.add('hidden');
+          laneBRow.classList.add('hidden');
+          metricBoxG2.classList.add('hidden');
+        }
+
+        document.getElementById('lane-a-label').textContent = appState.slotA.alias;
+        document.getElementById('lane-b-label').textContent = appState.slotB.alias;
+        document.getElementById('metric-label-g1').textContent = `Лише ${appState.slotA.alias}`;
+        document.getElementById('metric-label-g2').textContent = `Лише ${appState.slotB.alias}`;
+
+        renderRibbonLanes();
+        renderMetrics();
+        updateNowIndicator();
+
+        const kyiv = getKyivTime();
+        const curIndex = Math.min(47, Math.max(0, Math.floor((kyiv.hour * 60 + kyiv.minute) / 30)));
+        renderDecisionCard(appState.scrubbedIndex !== null ? appState.scrubbedIndex : curIndex);
+        renderTransitionCountdown(curIndex);
+      }
+
+      function renderRibbonLanes() {
+        const laneAContainer = document.getElementById('lane-a-blocks');
+        const laneBContainer = document.getElementById('lane-b-blocks');
+        const laneJointContainer = document.getElementById('lane-joint-blocks');
+
+        laneAContainer.innerHTML = '';
+        laneBContainer.innerHTML = '';
+        laneJointContainer.innerHTML = '';
+
+        for (let i = 0; i < 48; i++) {
+          const item = appState.timeline[i];
+
+          // Block A
+          const blockA = document.createElement('div');
+          blockA.style.backgroundColor = STATUS_COLORS[item.status_a] || '#1E293B';
+          blockA.className = 'w-full h-full border-r border-slate-900/40 last:border-r-0';
+          laneAContainer.appendChild(blockA);
+
+          // Block B
+          if (appState.hasSlotB) {
+            const blockB = document.createElement('div');
+            blockB.style.backgroundColor = STATUS_COLORS[item.status_b] || '#1E293B';
+            blockB.className = 'w-full h-full border-r border-slate-900/40 last:border-r-0';
+            laneBContainer.appendChild(blockB);
+          }
+
+          // Joint Block
+          const blockJoint = document.createElement('div');
+          blockJoint.style.backgroundColor = item.color;
+          blockJoint.className = 'w-full h-full border-r border-slate-900/40 last:border-r-0 flex items-center justify-center text-[10px] overflow-hidden';
+          if (item.joint_status === 'BOTH_ON') {
+            blockJoint.innerHTML = '<span class="scale-75 select-none drop-shadow">⚡️</span>';
+          }
+          laneJointContainer.appendChild(blockJoint);
+        }
+      }
+
+      function renderMetrics() {
+        document.getElementById('metric-both-on').textContent = `${appState.metrics.bothOnHours.toFixed(1)} год`;
+        document.getElementById('metric-group1-only').textContent = `${appState.metrics.group1OnlyHours.toFixed(1)} год`;
+        document.getElementById('metric-group2-only').textContent = `${appState.metrics.group2OnlyHours.toFixed(1)} год`;
+        document.getElementById('metric-both-off').textContent = `${appState.metrics.bothOffHours.toFixed(1)} год`;
+      }
+
+      function updateNowIndicator() {
+        const kyiv = getKyivTime();
+        const slotIdx = Math.floor((kyiv.hour * 60 + kyiv.minute) / 30);
+        const minuteFraction = (kyiv.minute % 30 + kyiv.second / 60) / 30;
+        const percent = Math.min(100, Math.max(0, ((slotIdx + minuteFraction) / 48) * 100));
+
+        const needle = document.getElementById('now-needle');
+        needle.style.left = `${percent}%`;
+      }
+
+      function renderDecisionCard(slotIndex) {
+        if (!appState.timeline[slotIndex]) return;
+        const item = appState.timeline[slotIndex];
+        const kyiv = getKyivTime();
+        const currentSlotIndex = Math.floor((kyiv.hour * 60 + kyiv.minute) / 30);
+
+        document.getElementById('card-time-interval').textContent = `${item.start_time} – ${item.end_time}`;
+
+        const isNowBadge = document.getElementById('card-is-now');
+        if (slotIndex === currentSlotIndex) isNowBadge.classList.remove('hidden');
+        else isNowBadge.classList.add('hidden');
+
+        const jointBadge = document.getElementById('card-joint-badge');
+        jointBadge.style.backgroundColor = `${item.color}33`;
+        jointBadge.style.color = item.color;
+        jointBadge.style.borderColor = item.color;
+        jointBadge.textContent = item.label;
+
+        document.getElementById('card-slot-a-alias').textContent = appState.slotA.alias;
+        const stateA = document.getElementById('card-slot-a-state');
+        if (item.status_a === 'ON') {
+          stateA.textContent = '🟩 Є світло';
+          stateA.className = 'font-bold text-green-400';
+        } else if (item.status_a === 'OFF') {
+          stateA.textContent = '⬛ Відключення';
+          stateA.className = 'font-bold text-slate-400';
+        } else if (item.status_a === 'EMERGENCY') {
+          stateA.textContent = '🚨 Аварійне';
+          stateA.className = 'font-bold text-red-400';
+        } else {
+          stateA.textContent = '🟨 Можливо';
+          stateA.className = 'font-bold text-amber-400';
+        }
+
+        const slotBStatusBox = document.getElementById('card-slot-b-status');
+        if (appState.hasSlotB) {
+          slotBStatusBox.classList.remove('hidden');
+          document.getElementById('card-slot-b-alias').textContent = appState.slotB.alias;
+          const stateB = document.getElementById('card-slot-b-state');
+          if (item.status_b === 'ON') {
+            stateB.textContent = '🟩 Є світло';
+            stateB.className = 'font-bold text-green-400';
+          } else if (item.status_b === 'OFF') {
+            stateB.textContent = '⬛ Відключення';
+            stateB.className = 'font-bold text-slate-400';
+          } else if (item.status_b === 'EMERGENCY') {
+            stateB.textContent = '🚨 Аварійне';
+            stateB.className = 'font-bold text-red-400';
+          } else {
+            stateB.textContent = '🟨 Можливо';
+            stateB.className = 'font-bold text-amber-400';
+          }
+        } else {
+          slotBStatusBox.classList.add('hidden');
+        }
+
+        // Action Recommendation
+        const reco = document.getElementById('card-recommendation');
+        if (appState.isEmergency || item.joint_status === 'EMERGENCY') {
+          reco.textContent = '🚨 Екстрені аварійні відключення! Графіки тимчасово не діють.';
+        } else if (item.joint_status === 'BOTH_ON') {
+          reco.textContent = '⚡️ Світло є в обох локаціях. Чудовий час для активних справ.';
+        } else if (item.joint_status === 'GROUP1_ONLY') {
+          reco.textContent = `💡 Світло є лише в "${appState.slotA.alias}" — залишайтесь або їдьте туди.`;
+        } else if (item.joint_status === 'GROUP2_ONLY') {
+          reco.textContent = `💡 Світло є лише в "${appState.slotB.alias}" — їдьте працювати або заряджатися туди.`;
+        } else if (item.joint_status === 'BOTH_OFF') {
+          reco.textContent = '⬛ Відключення в обох локаціях. Бережіть заряд акумуляторів.';
+        } else {
+          reco.textContent = '⚠️ Можливе відключення згідно з сірою зоною графіка.';
+        }
+      }
+
+      function renderTransitionCountdown(currentSlotIndex) {
+        if (!appState.timeline.length) return;
+        const currentStatus = appState.timeline[currentSlotIndex].joint_status;
+        let transitionIndex = null;
+
+        for (let i = currentSlotIndex + 1; i < 48; i++) {
+          if (appState.timeline[i].joint_status !== currentStatus) {
+            transitionIndex = i;
+            break;
+          }
+        }
+
+        const transitionEl = document.getElementById('next-transition-time');
+        const countdownEl = document.getElementById('next-transition-countdown');
+
+        if (transitionIndex !== null) {
+          const nextTime = appState.timeline[transitionIndex].start_time;
+          transitionEl.textContent = nextTime;
+
+          const kyiv = getKyivTime();
+          const curTotalMin = kyiv.hour * 60 + kyiv.minute;
+          const nextTotalMin = transitionIndex * 30;
+          const diffMin = Math.max(0, nextTotalMin - curTotalMin);
+          const diffH = Math.floor(diffMin / 60);
+          const diffM = diffMin % 60;
+
+          if (diffH > 0) {
+            countdownEl.textContent = `через ${diffH} год ${diffM} хв`;
+          } else {
+            countdownEl.textContent = `через ${diffM} хв`;
+          }
+        } else {
+          transitionEl.textContent = '24:00';
+          countdownEl.textContent = 'до кінця доби без змін';
+        }
+      }
+
+      // =========================================================================
+      // 10. INTERACTIVE TOUCH & MOUSE SCRUBBER
+      // =========================================================================
+      const scrollContainer = document.getElementById('ribbon-scroll-container');
+      const ribbonViewport = document.getElementById('ribbon-viewport');
+      const scrubberCursor = document.getElementById('scrubber-cursor');
+      const scrubberTimeText = document.getElementById('scrubber-cursor-time');
+
+      function handleScrub(clientX) {
+        const rect = ribbonViewport.getBoundingClientRect();
+        const touchX = clientX - rect.left;
+        const slotWidth = rect.width / 48.0;
+        const slotIndex = Math.min(47, Math.max(0, Math.floor(touchX / slotWidth)));
+
+        if (slotIndex !== appState.scrubbedIndex) {
+          appState.scrubbedIndex = slotIndex;
+          triggerHaptic('selection');
+          renderDecisionCard(slotIndex);
+        }
+
+        const percent = ((slotIndex + 0.5) / 48.0) * 100;
+        scrubberCursor.style.left = `${percent}%`;
+        scrubberCursor.classList.remove('hidden');
+        scrubberTimeText.textContent = appState.timeline[slotIndex] ? appState.timeline[slotIndex].start_time : '';
+      }
+
+      function stopScrub() {
+        appState.isTouchDragging = false;
+      }
+
+      ribbonViewport.addEventListener('mousedown', (e) => {
+        appState.isTouchDragging = true;
+        handleScrub(e.clientX);
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (appState.isTouchDragging) handleScrub(e.clientX);
+      });
+      window.addEventListener('mouseup', stopScrub);
+
+      ribbonViewport.addEventListener('touchstart', (e) => {
+        if (e.touches.length > 0) {
+          appState.isTouchDragging = true;
+          handleScrub(e.touches[0].clientX);
+        }
+      }, { credentials: 'omit', passive: true });
+
+      window.addEventListener('touchmove', (e) => {
+        if (appState.isTouchDragging && e.touches.length > 0) {
+          handleScrub(e.touches[0].clientX);
+        }
+      }, { credentials: 'omit', passive: true });
+
+      window.addEventListener('touchend', stopScrub);
+      window.addEventListener('touchcancel', stopScrub);
+
+      // Auto-scroll to "Now" needle on initial load
+      function scrollToNowNeedle() {
+        setTimeout(() => {
+          const needle = document.getElementById('now-needle');
+          if (needle && scrollContainer) {
+            const containerWidth = scrollContainer.clientWidth;
+            const needleLeft = needle.offsetLeft;
+            scrollContainer.scrollTo({
+              left: Math.max(0, needleLeft - containerWidth / 2),
+              behavior: 'smooth'
+            });
+          }
+        }, 300);
+      }
+
+      // =========================================================================
+      // 11. SETTINGS MODAL & DEEP-LINK ENCODER
+      // =========================================================================
+      function encodeSyncCode(slotA, slotB) {
+        const regA = slotA.region || 'kyiv';
+        const grpA = slotA.group || 1;
+        const subgrpA = slotA.subgroup || '1.1';
+        const alA = slotA.alias || '';
+
+        function toBase64Url(str) {
+          const utf8Bytes = new TextEncoder().encode(str);
+          let binStr = '';
+          for (let i = 0; i < utf8Bytes.length; i++) {
+            binStr += String.fromCharCode(utf8Bytes[i]);
+          }
+          return btoa(binStr).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        if (slotB) {
+          const regB = slotB.region || 'kyiv';
+          const grpB = slotB.group || 1;
+          const subgrpB = slotB.subgroup || '1.1';
+          const alB = slotB.alias || '';
+
+          for (const maxLen of [10, 6, 4, 2, 0]) {
+            const curA = alA.slice(0, maxLen);
+            const curB = alB.slice(0, maxLen);
+            const raw = `${regA}:${grpA}:${subgrpA}:${curA}|${regB}:${grpB}:${subgrpB}:${curB}`;
+            const code = 'sync_' + toBase64Url(raw);
+            if (code.length <= 64) return code;
+          }
+          const raw = `${regA}:${grpA}:${subgrpA}|${regB}:${grpB}:${subgrpB}`;
+          return 'sync_' + toBase64Url(raw);
+        } else {
+          for (const maxLen of [16, 10, 6, 4, 0]) {
+            const curA = alA.slice(0, maxLen);
+            const raw = `${regA}:${grpA}:${subgrpA}:${curA}`;
+            const code = 'sync_' + toBase64Url(raw);
+            if (code.length <= 64) return code;
+          }
+          const raw = `${regA}:${grpA}:${subgrpA}`;
+          return 'sync_' + toBase64Url(raw);
+        }
+      }
+
+      const modal = document.getElementById('settings-modal');
+      const btnSettingsToggle = document.getElementById('btn-settings-toggle');
+      const btnCloseSettings = document.getElementById('btn-close-settings');
+      const btnSaveSettings = document.getElementById('btn-save-settings');
+      const btnSyncBot = document.getElementById('btn-sync-bot');
+      const checkEnableSlotB = document.getElementById('check-enable-slot-b');
+      const slotBInputs = document.getElementById('slot-b-inputs');
+
+      btnSettingsToggle.addEventListener('click', () => {
+        document.getElementById('input-slot-a-alias').value = appState.slotA.alias;
+        document.getElementById('select-slot-a-region').value = appState.slotA.region;
+        document.getElementById('select-slot-a-group').value = appState.slotA.group;
+        updateSubgroupOptions('a');
+        document.getElementById('select-slot-a-subgroup').value = appState.slotA.subgroup;
+
+        checkEnableSlotB.checked = appState.hasSlotB;
+        if (appState.hasSlotB) {
+          slotBInputs.classList.remove('opacity-50', 'pointer-events-none');
+          document.getElementById('input-slot-b-alias').value = appState.slotB.alias;
+          document.getElementById('select-slot-b-region').value = appState.slotB.region;
+          document.getElementById('select-slot-b-group').value = appState.slotB.group;
+          updateSubgroupOptions('b');
+          document.getElementById('select-slot-b-subgroup').value = appState.slotB.subgroup;
+        } else {
+          slotBInputs.classList.add('opacity-50', 'pointer-events-none');
+        }
+
+        modal.classList.remove('hidden');
+      });
+
+      btnCloseSettings.addEventListener('click', () => {
+        modal.classList.add('hidden');
+      });
+
+      checkEnableSlotB.addEventListener('change', () => {
+        if (checkEnableSlotB.checked) {
+          slotBInputs.classList.remove('opacity-50', 'pointer-events-none');
+        } else {
+          slotBInputs.classList.add('opacity-50', 'pointer-events-none');
+        }
+      });
+
+      function updateSubgroupOptions(slot) {
+        const grpVal = document.getElementById(`select-slot-${slot}-group`).value;
+        const subSel = document.getElementById(`select-slot-${slot}-subgroup`);
+        const curVal = subSel.value;
+        subSel.innerHTML = `
+          <option value="${grpVal}.1">Підгрупа 1 (${grpVal}.1)</option>
+          <option value="${grpVal}.2">Підгрупа 2 (${grpVal}.2)</option>
+        `;
+        if (curVal === `${grpVal}.2`) subSel.value = `${grpVal}.2`;
+        else subSel.value = `${grpVal}.1`;
+      }
+
+      document.getElementById('select-slot-a-group').addEventListener('change', () => updateSubgroupOptions('a'));
+      document.getElementById('select-slot-b-group').addEventListener('change', () => updateSubgroupOptions('b'));
+
+      async function applySettings(andSync) {
+        appState.slotA.alias = document.getElementById('input-slot-a-alias').value.trim() || 'Дім';
+        appState.slotA.region = document.getElementById('select-slot-a-region').value;
+        appState.slotA.group = parseInt(document.getElementById('select-slot-a-group').value, 10);
+        appState.slotA.subgroup = document.getElementById('select-slot-a-subgroup').value;
+
+        appState.hasSlotB = checkEnableSlotB.checked;
+        if (appState.hasSlotB) {
+          appState.slotB.alias = document.getElementById('input-slot-b-alias').value.trim() || 'Офіс';
+          appState.slotB.region = document.getElementById('select-slot-b-region').value;
+          appState.slotB.group = parseInt(document.getElementById('select-slot-b-group').value, 10);
+          appState.slotB.subgroup = document.getElementById('select-slot-b-subgroup').value;
+        }
+
+        persistSlots({
+          slot_a: {
+            alias: appState.slotA.alias,
+            region: appState.slotA.region,
+            group: appState.slotA.group,
+            subgroup: appState.slotA.subgroup
+          },
+          slot_b: appState.hasSlotB ? {
+            alias: appState.slotB.alias,
+            region: appState.slotB.region,
+            group: appState.slotB.group,
+            subgroup: appState.slotB.subgroup
+          } : null
+        });
+
+        triggerHaptic('success');
+        modal.classList.add('hidden');
+
+        // Refresh schedules from public mirror
+        try {
+          const schedDataA = await fetchMirrorSchedule(appState.slotA.region, appState.slotA.subgroup);
+          appState.slotA.sched = schedDataA.sched;
+          if (appState.hasSlotB) {
+            const schedDataB = await fetchMirrorSchedule(appState.slotB.region, appState.slotB.subgroup);
+            appState.slotB.sched = schedDataB.sched;
+          }
+        } catch (e) {}
+
+        computeTimeline();
+        renderApp();
+
+        if (andSync) {
+          const syncCode = encodeSyncCode(
+            appState.slotA,
+            appState.hasSlotB ? appState.slotB : null
+          );
+
+          let sentViaData = false;
+          if (tg && typeof tg.sendData === 'function') {
+            try {
+              tg.sendData(JSON.stringify({
+                slot_a: appState.slotA,
+                slot_b: appState.hasSlotB ? appState.slotB : null,
+                sync_code: syncCode
+              }));
+              sentViaData = true;
+            } catch (e) {}
+          }
+
+          if (!sentViaData) {
+            const botUser = appState.botUsername || 'dtek_bot';
+            const deepLink = `https://t.me/${botUser}?start=${syncCode}`;
+            if (tg && typeof tg.openTelegramLink === 'function') {
+              tg.openTelegramLink(deepLink);
+            } else {
+              window.location.href = deepLink;
+            }
+          }
+        }
+      }
+
+      btnSaveSettings.addEventListener('click', () => applySettings(false));
+      btnSyncBot.addEventListener('click', () => applySettings(true));
+
+      // =========================================================================
+      // 12. BOOTSTRAP CASCADE
+      // =========================================================================
+      async function bootstrap() {
+        const hash = window.location.hash || '';
+        let payloadParsed = false;
+
+        // Tier 1: URL Fragment #p=
+        if (hash.includes('#p=') || hash.startsWith('#eN')) {
+          try {
+            const rawFragment = hash.includes('#p=') ? hash.split('#p=')[1] : hash.slice(1);
+            const bytes = base64urlToBytes(rawFragment);
+            const jsonStr = await decompressZlibBytes(bytes);
+            const payload = JSON.parse(jsonStr);
+
+            appState.botUsername = payload.u || payload.bot_username || payload.bot || 'dtek_bot';
+            appState.comparisonDate = payload.d || payload.date || payload.comparison_date || appState.comparisonDate;
+            appState.isEmergency = Boolean(payload.e || payload.is_emergency);
+            appState.stale = Boolean(payload.s || payload.stale);
+
+            const slotAObj = payload.slot_a || {};
+            const saObj = payload.sa || {};
+            const aliasA = slotAObj.alias || saObj.alias || 'Дім';
+            const regionA = slotAObj.region || saObj.region || 'kyiv';
+            const groupA = slotAObj.group || saObj.group || 1;
+            const subgroupA = slotAObj.subgroup || saObj.subgroup || '1.1';
+            const schedA = payload.s_a || payload.slots_a || saObj.sched || saObj.statuses || slotAObj.sched || slotAObj.statuses || '';
+
+            appState.slotA = {
+              alias: aliasA,
+              region: regionA,
+              group: groupA,
+              subgroup: subgroupA,
+              sched: parseScheduleString(schedA)
+            };
+
+            const slotBObj = payload.slot_b;
+            const sbObj = payload.sb;
+            if (slotBObj || sbObj) {
+              appState.hasSlotB = true;
+              const aliasB = (slotBObj && slotBObj.alias) || (sbObj && sbObj.alias) || 'Офіс';
+              const regionB = (slotBObj && slotBObj.region) || (sbObj && sbObj.region) || 'kyiv';
+              const groupB = (slotBObj && slotBObj.group) || (sbObj && sbObj.group) || 3;
+              const subgroupB = (slotBObj && slotBObj.subgroup) || (sbObj && sbObj.subgroup) || '3.2';
+              const schedB = payload.s_b || payload.slots_b || (sbObj && (sbObj.sched || sbObj.statuses)) || (slotBObj && (slotBObj.sched || slotBObj.statuses)) || '';
+              appState.slotB = {
+                alias: aliasB,
+                region: regionB,
+                group: groupB,
+                subgroup: subgroupB,
+                sched: parseScheduleString(schedB)
+              };
+            } else {
+              appState.hasSlotB = false;
+            }
+
+            payloadParsed = true;
+          } catch (e) {
+            payloadParsed = false;
+          }
+        }
+
+        // Tier 2: Standalone Fallback via CloudStorage & Mirror
+        if (!payloadParsed) {
+          const saved = await loadSavedSlots();
+          if (saved && saved.slot_a) {
+            appState.slotA.alias = saved.slot_a.alias || 'Дім';
+            appState.slotA.region = saved.slot_a.region || 'kyiv';
+            appState.slotA.group = saved.slot_a.group || 1;
+            appState.slotA.subgroup = saved.slot_a.subgroup || '1.1';
+
+            if (saved.slot_b) {
+              appState.hasSlotB = true;
+              appState.slotB.alias = saved.slot_b.alias || 'Офіс';
+              appState.slotB.region = saved.slot_b.region || 'kyiv';
+              appState.slotB.group = saved.slot_b.group || 3;
+              appState.slotB.subgroup = saved.slot_b.subgroup || '3.2';
+            } else {
+              appState.hasSlotB = false;
+            }
+          }
+
+          try {
+            const dataA = await fetchMirrorSchedule(appState.slotA.region, appState.slotA.subgroup);
+            appState.slotA.sched = dataA.sched;
+            appState.comparisonDate = dataA.date;
+            appState.isEmergency = dataA.isEmergency;
+
+            if (appState.hasSlotB) {
+              const dataB = await fetchMirrorSchedule(appState.slotB.region, appState.slotB.subgroup);
+              appState.slotB.sched = dataB.sched;
+            }
+          } catch (err) {
+            // Tier 3: Deterministic Offline Mock Demo Fallback
+            document.getElementById('demo-banner').classList.remove('hidden');
+            appState.slotA.sched = Array.from("OOOOXXXXOOOOXXXXOOOOXXXXOOOOXXXXOOOOXXXXOOOOXXXX").map(charToStatus);
+            appState.slotB.sched = Array.from("XXOOOOXXXXOOOOXXXXOOOOXXXXOOOOXXXXOOOOXXXXOOOOXX").map(charToStatus);
+          }
+        }
+
+        computeTimeline();
+        renderApp();
+        scrollToNowNeedle();
+
+        // 30-second interval timer for "Now" needle & countdown update
+        setInterval(() => {
+          updateNowIndicator();
+          const kyiv = getKyivTime();
+          const curIndex = Math.min(47, Math.max(0, Math.floor((kyiv.hour * 60 + kyiv.minute) / 30)));
+          if (appState.scrubbedIndex === null) {
+            renderDecisionCard(curIndex);
+          }
+          renderTransitionCountdown(curIndex);
+        }, 30000);
+      }
+
+      window.addEventListener('DOMContentLoaded', bootstrap);
+    })();
+  </script>
+</body>
+</html>

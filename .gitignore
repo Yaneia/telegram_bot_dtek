@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local helpers
+bin/
+
+# Secrets / local configuration
+.env
+.env.*
+!.env.example
+
+# Runtime data (SQLite database, WAL/SHM files)
+data/*
+!data/.gitkeep
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+
+# Agent working state and service docs
+.agents/
+PROJECT.md
+PROMPT_SPECIFICATION.md
+TEST_INFRA.md
+TEST_READY.md
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
