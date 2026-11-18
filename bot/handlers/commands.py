@@ -301,7 +301,10 @@ async def cmd_status(
         except Exception:
             pass
 
-    tma_fragment = TMAPayload.encode(comparison, bot_username=bot_username)
+    user_settings = await db.settings.get_settings(user_id)
+    show_joint = bool(getattr(user_settings, "show_joint_timeline", False))
+
+    tma_fragment = TMAPayload.encode(comparison, bot_username=bot_username, show_joint=show_joint)
     tma_url = f"{settings.WEBAPP_URL}{tma_fragment}"
 
     # Determine render mode (image vs text)
@@ -310,7 +313,7 @@ async def cmd_status(
 
     if current_mode == "image":
         try:
-            png_bytes = ImageRenderer.render_timeline_png(comparison)
+            png_bytes = ImageRenderer.render_timeline_png(comparison, show_joint=show_joint)
             caption = (
                 f"⚡ <b>Графік відключень на {comparison.comparison_date}</b>\n"
                 f"📍 {slot1.alias} ({slot1.subgroup_id})"
@@ -330,7 +333,7 @@ async def cmd_status(
             logger.warning("Image rendering failed, falling back to text: %s", exc)
 
     # Text mode rendering (fallback or user choice)
-    text_table = TextRenderer.render_timeline_text(comparison)
+    text_table = TextRenderer.render_timeline_text(comparison, show_joint=show_joint)
     msg_body = f"<code>{text_table}</code>"
     if hasattr(message, "answer"):
         await message.answer(

@@ -77,7 +77,34 @@ def _get_joint_badge(joint_str: str, alias_a: str, alias_b: str, single_mode: bo
     return badge_map.get(joint_str, f"⚪{joint_str[:4]}")
 
 
-def render_timeline_text(timeline_data: Any, **kwargs: Any) -> str:
+def _uk_plural(n: int, form1: str, form2_4: str, form5: str) -> str:
+    """Return Ukrainian noun form for integer n."""
+    n_abs = abs(n) % 100
+    if 11 <= n_abs <= 19:
+        return form5
+    last = n_abs % 10
+    if last == 1:
+        return form1
+    if 2 <= last <= 4:
+        return form2_4
+    return form5
+
+
+def format_duration_uk(minutes: int) -> str:
+    """Format duration in minutes as human-readable Ukrainian text (e.g. '1 година 8 хвилин')."""
+    total = max(0, int(minutes))
+    hours, mins = divmod(total, 60)
+    parts: List[str] = []
+    if hours > 0:
+        h_word = _uk_plural(hours, "година", "години", "годин")
+        parts.append(f"{hours} {h_word}")
+    if mins > 0 or hours == 0:
+        m_word = _uk_plural(mins, "хвилина", "хвилини", "хвилин")
+        parts.append(f"{mins} {m_word}")
+    return " ".join(parts)
+
+
+def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: Any) -> str:
     """
     Render mobile monospace Unicode table strictly <= 28 characters wide.
     Supports both dual-slot schedule comparison and single-slot fallback.
@@ -187,14 +214,15 @@ def render_timeline_text(timeline_data: Any, **kwargs: Any) -> str:
 
     if single_mode:
         lines.append(f"• 🟢 Світло є: {g1_only_h} год")
-        lines.append(f"• ⬛ Блекаут: {both_off_h} год")
+        lines.append(f"• ⬛ Відсутнє: {both_off_h} год")
         if _safe_float(uncertain_h) > 0:
             lines.append(f"• 🟨 Сіра: {uncertain_h} год")
     else:
-        lines.append(f"• 🟢 Всюди: {both_on_h} год")
-        lines.append(f"• 🔵 Лише 1: {g1_only_h} год")
-        lines.append(f"• 🟣 Лише 2: {g2_only_h} год")
-        lines.append(f"• ⬛ Блекаут: {both_off_h} год")
+        if show_joint:
+            lines.append(f"• 🟢 Всюди: {both_on_h} год")
+            lines.append(f"• 🔵 Лише 1: {g1_only_h} год")
+            lines.append(f"• 🟣 Лише 2: {g2_only_h} год")
+        lines.append(f"• ⬛ Відсутнє: {both_off_h} год")
         if _safe_float(uncertain_h) > 0:
             lines.append(f"• 🟨 Сіра: {uncertain_h} год")
 
@@ -208,12 +236,18 @@ def render_timeline_text(timeline_data: Any, **kwargs: Any) -> str:
     min_to_trans = _extract_field(summary, "minutes_to_next_transition")
 
     if min_to_trans is not None and next_trans_time:
-        countdown_line = f"⏳ До зміни: {min_to_trans} хв ({next_trans_time})"
-        if len(countdown_line) > 28:
-            countdown_line = f"⏳ До зміни: {min_to_trans} хв"
-        lines.append(countdown_line)
+        dur_text = format_duration_uk(int(min_to_trans))
+        header_line = f"⏳ До зміни ({next_trans_time}):"
+        if len(header_line) <= 28 and len(f"  {dur_text}") <= 28:
+            lines.append(header_line)
+            lines.append(f"  {dur_text}")
+        else:
+            lines.append(f"⏳ До зміни ({next_trans_time}):")
+            lines.append(dur_text)
     elif min_to_trans is not None:
-        lines.append(f"⏳ До зміни: {min_to_trans} хв")
+        dur_text = format_duration_uk(int(min_to_trans))
+        lines.append("⏳ До зміни:")
+        lines.append(f"  {dur_text}")
     elif next_trans_time:
         lines.append(f"⏳ До зміни: {next_trans_time}")
     else:

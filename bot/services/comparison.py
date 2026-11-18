@@ -239,22 +239,22 @@ def _generate_recommendation(
     alias_b: str = "Офіс",
     is_emergency: bool = False,
 ) -> str:
-    """Generate actionable smart recommendation text in Ukrainian."""
+    """Generate concise factual status summary text in Ukrainian."""
     if is_emergency or current_joint == JointStatus.EMERGENCY:
-        return "Аварійні відключення за розпорядженням Укренерго. Графіки не діють. Зберігайте спокій."
+        return "Аварійні відключення за розпорядженням Укренерго. Графіки не діють."
     if current_joint == JointStatus.BOTH_ON:
-        return "Світло є в обох локаціях. Зручний час для енергоємних приладів та заряджання пристроїв."
+        return "Світло є в обох локаціях."
     if current_joint == JointStatus.GROUP1_ONLY:
-        return f"Світло є лише у локації 1 ({alias_a}). Рекомендується перебувати тут."
+        return f"Світло є лише у {alias_a}."
     if current_joint == JointStatus.GROUP2_ONLY:
-        return f"Світло є лише у локації 2 ({alias_b}). Рекомендується перейти в офіс або зарядити техніку."
+        return f"Світло є лише у {alias_b}."
     if current_joint == JointStatus.BOTH_OFF:
-        return "Світла немає в обох локаціях. Використовуйте автономні джерела живлення."
+        return "Світла немає в обох локаціях."
     if current_joint == JointStatus.GROUP1_ON_GROUP2_MAYBE:
-        return f"У локації 1 ({alias_a}) світло гарантовано є. У локації 2 ({alias_b}) можливі відключення."
+        return f"У {alias_a} світло є, у {alias_b} можливі відключення."
     if current_joint == JointStatus.GROUP1_MAYBE_GROUP2_ON:
-        return f"У локації 2 ({alias_b}) світло є. У локації 1 ({alias_a}) можливі відключення."
-    return "Можливе відключення електроенергії. Слідкуйте за оновленнями графіків."
+        return f"У {alias_b} світло є, у {alias_a} можливі відключення."
+    return "Можливе відключення електроенергії."
 
 
 def _parse_group_subgroup(

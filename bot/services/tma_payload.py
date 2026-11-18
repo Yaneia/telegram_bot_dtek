@@ -63,7 +63,13 @@ class TMAPayload:
     """TMA URL fragment bridge and deep-link synchronization serializer."""
 
     @classmethod
-    def encode(cls, response: Any, bot_username: str = "dtek_bot") -> str:
+    def encode(
+        cls,
+        response: Any,
+        bot_username: str = "dtek_bot",
+        show_joint: Optional[bool] = None,
+        **kwargs: Any,
+    ) -> str:
         """
         Encode TwoGroupTimelineResponse (or dict) into a compressed URL fragment.
 
@@ -170,6 +176,7 @@ class TMAPayload:
             "is_emergency": is_emergency,
             "s": 1 if stale else 0,
             "stale": stale,
+            **({"j": 1 if show_joint else 0} if show_joint is not None else {}),
             "slot_a": slot_a_dict,
             "slot_b": slot_b_dict,
             "s_a": status_str_a,

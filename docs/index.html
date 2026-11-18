@@ -187,8 +187,8 @@
             </div>
           </div>
 
-          <!-- Lane 3: Joint Opportunity Ribbon -->
-          <div class="flex items-center gap-2 pt-0.5">
+          <!-- Lane 3: Joint Opportunity Ribbon (Optional, visually separated) -->
+          <div id="lane-joint-row" class="flex items-center gap-2 mt-2 pt-2.5 border-t border-slate-700/80">
             <span class="w-12 text-[11px] font-bold text-amber-400 truncate text-right flex items-center justify-end gap-0.5">
               <span>⚡️</span><span>Спільне</span>
             </span>
@@ -235,7 +235,7 @@
 
       <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 flex flex-col gap-1">
         <span class="text-xs text-slate-400 flex items-center gap-1">
-          <span class="text-slate-500">⬛</span> Блекаут
+          <span class="text-slate-500">⬛</span> Світло відсутнє
         </span>
         <span id="metric-both-off" class="font-bold text-lg text-slate-300 font-mono">0.0 год</span>
       </div>
@@ -359,6 +359,14 @@
         </div>
       </div>
 
+      <!-- Joint Timeline Option -->
+      <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+        <label class="flex items-center justify-between gap-2 text-xs text-slate-200 cursor-pointer">
+          <span>📊 Показувати спільний графік («Спільне»)</span>
+          <input type="checkbox" id="check-show-joint" class="rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0">
+        </label>
+      </div>
+
       <!-- Action Buttons -->
       <div class="flex flex-col gap-2 pt-2">
         <button id="btn-save-settings" class="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 font-semibold text-white text-xs transition-colors shadow">
@@ -443,6 +451,7 @@
           sched: Array(48).fill('ON')
         },
         hasSlotB: true,
+        showJoint: false,
         timeline: [],
         metrics: {
           bothOnHours: 0,
@@ -823,7 +832,13 @@
         for (let i = 0; i < 48; i++) {
           const item = appState.timeline[i];
 
-          // Block A
+        const laneJointRow = document.getElementById('lane-joint-row');
+        if (laneJointRow) {
+          if (appState.showJoint) laneJointRow.classList.remove('hidden');
+          else laneJointRow.classList.add('hidden');
+        }
+
+        // Block A
           const blockA = document.createElement('div');
           blockA.style.backgroundColor = STATUS_COLORS[item.status_a] || '#1E293B';
           blockA.className = 'w-full h-full border-r border-slate-900/40 last:border-r-0';
@@ -965,9 +980,12 @@
           const diffM = diffMin % 60;
 
           if (diffH > 0) {
-            countdownEl.textContent = `через ${diffH} год ${diffM} хв`;
+            const hWord = (diffH % 100 >= 11 && diffH % 100 <= 19) ? 'годин' : (diffH % 10 === 1 ? 'година' : (diffH % 10 >= 2 && diffH % 10 <= 4 ? 'години' : 'годин'));
+            const mWord = (diffM % 100 >= 11 && diffM % 100 <= 19) ? 'хвилин' : (diffM % 10 === 1 ? 'хвилина' : (diffM % 10 >= 2 && diffM % 10 <= 4 ? 'хвилини' : 'хвилин'));
+            countdownEl.textContent = diffM > 0 ? `через ${diffH} ${hWord} ${diffM} ${mWord}` : `через ${diffH} ${hWord}`;
           } else {
-            countdownEl.textContent = `через ${diffM} хв`;
+            const mWord = (diffM % 100 >= 11 && diffM % 100 <= 19) ? 'хвилин' : (diffM % 10 === 1 ? 'хвилина' : (diffM % 10 >= 2 && diffM % 10 <= 4 ? 'хвилини' : 'хвилин'));
+            countdownEl.textContent = `через ${diffM} ${mWord}`;
           }
         } else {
           transitionEl.textContent = '24:00';
@@ -1096,6 +1114,7 @@
       const btnSaveSettings = document.getElementById('btn-save-settings');
       const btnSyncBot = document.getElementById('btn-sync-bot');
       const checkEnableSlotB = document.getElementById('check-enable-slot-b');
+      const checkShowJoint = document.getElementById('check-show-joint');
       const slotBInputs = document.getElementById('slot-b-inputs');
 
       btnSettingsToggle.addEventListener('click', () => {
@@ -1106,6 +1125,7 @@
         document.getElementById('select-slot-a-subgroup').value = appState.slotA.subgroup;
 
         checkEnableSlotB.checked = appState.hasSlotB;
+        if (checkShowJoint) checkShowJoint.checked = appState.showJoint;
         if (appState.hasSlotB) {
           slotBInputs.classList.remove('opacity-50', 'pointer-events-none');
           document.getElementById('input-slot-b-alias').value = appState.slotB.alias;
@@ -1154,6 +1174,9 @@
         appState.slotA.subgroup = document.getElementById('select-slot-a-subgroup').value;
 
         appState.hasSlotB = checkEnableSlotB.checked;
+        if (checkShowJoint) {
+          appState.showJoint = checkShowJoint.checked;
+        }
         if (appState.hasSlotB) {
           appState.slotB.alias = document.getElementById('input-slot-b-alias').value.trim() || 'Офіс';
           appState.slotB.region = document.getElementById('select-slot-b-region').value;
@@ -1163,6 +1186,7 @@
 
         persistSlots({
           bot_username: appState.botUsername,
+          show_joint: appState.showJoint,
           slot_a: {
             alias: appState.slotA.alias,
             region: appState.slotA.region,
@@ -1250,6 +1274,9 @@
             appState.comparisonDate = payload.d || payload.date || payload.comparison_date || appState.comparisonDate;
             appState.isEmergency = Boolean(payload.e || payload.is_emergency);
             appState.stale = Boolean(payload.s || payload.stale);
+            if (payload.j !== undefined) {
+              appState.showJoint = Boolean(payload.j);
+            }
 
             const slotAObj = payload.slot_a || {};
             const saObj = payload.sa || {};
@@ -1290,6 +1317,7 @@
             payloadParsed = true;
             persistSlots({
               bot_username: appState.botUsername,
+              show_joint: appState.showJoint,
               slot_a: {
                 alias: appState.slotA.alias,
                 region: appState.slotA.region,
@@ -1313,6 +1341,9 @@
           const saved = await loadSavedSlots();
           if (saved && saved.bot_username) {
             appState.botUsername = saved.bot_username;
+          }
+          if (saved && saved.show_joint !== undefined) {
+            appState.showJoint = Boolean(saved.show_joint);
           }
           if (saved && saved.slot_a) {
             appState.slotA.alias = saved.slot_a.alias || 'Дім';

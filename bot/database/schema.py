@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS notification_settings (
     notify_schedule_change BOOLEAN DEFAULT 1,
     silent_hours_start INTEGER DEFAULT 23, -- 23:00
     silent_hours_end INTEGER DEFAULT 7,     -- 07:00
+    show_joint_timeline BOOLEAN DEFAULT 0,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -92,6 +93,12 @@ async def init_db(conn: Union[aiosqlite.Connection, Any]) -> None:
     """Initialize SQLite database schema tables and indexes in a transactional block."""
     try:
         await conn.executescript(SCHEMA_DDL)
+        try:
+            await conn.execute(
+                "ALTER TABLE notification_settings ADD COLUMN show_joint_timeline BOOLEAN DEFAULT 0;"
+            )
+        except Exception:
+            pass
         await conn.commit()
     except Exception:
         await conn.rollback()

@@ -268,9 +268,10 @@ async def cb_slot_group(query: Any, **kwargs: Any) -> None:
 async def cb_slot_subgroup(
     query: Any,
     db: Optional[DatabaseRepository] = None,
+    state: Optional[FSMContext] = None,
     **kwargs: Any,
 ) -> None:
-    """Save selected slot configuration to SQLite database."""
+    """Save selected slot configuration and prompt for optional custom slot name."""
     if db is None:
         db = await _get_db()
 
@@ -296,60 +297,104 @@ async def cb_slot_subgroup(
         alias=alias,
     )
 
-    slots = await db.slots.get_slots_for_user(user_id)
+    if state is not None and hasattr(state, "set_state"):
+        await state.update_data(rename_slot_num=slot_num)
+        await state.set_state(SlotRenameState.waiting_for_alias)
+
+    from bot.handlers.keyboards import InlineKeyboardButton, InlineKeyboardMarkup
+    keep_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"✅ Залишити «{alias}»",
+                    callback_data=f"slot_keep_alias:{slot_num}",
+                )
+            ]
+        ]
+    )
+
     text = (
-        f"✅ <b>Слот {slot_num} успішно збережено!</b>\n\n"
-        f"• Назва: <b>{alias}</b>\n"
-        f"• Регіон: <code>{region_code}</code>\n"
-        f"• Черга: <b>{subgroup_id}</b>\n\n"
-        "Тепер ви можете переглянути актуальний графік або налаштувати інший слот."
+        f"📍 <b>Слот {slot_num}</b> ({region_code}, Черга <b>{subgroup_id}</b>)\n\n"
+        f"✏️ Введіть назву для цього слота (до 16 символів, наприклад: <i>Квартира</i> або <i>Робота</i>),\n"
+        f"або натисніть кнопку нижче, щоб залишити <b>{alias}</b>:"
     )
 
     msg = getattr(query, "message", None)
-    if msg and hasattr(msg, "edit_text"):
-        await msg.edit_text(text, parse_mode="HTML", reply_markup=build_slots_keyboard(slots))
-    elif msg and hasattr(msg, "answer"):
-        await msg.answer(text, parse_mode="HTML", reply_markup=build_slots_keyboard(slots))
+    await _edit_or_answer(msg, text, reply_markup=keep_kb, parse_mode="HTML")
 
     if hasattr(query, "answer"):
         try:
-            await query.answer("Чергу успішно збережено! ✅")
+            await query.answer()
         except Exception:
             pass
 
 
 class SlotRenameState(StatesGroup):
-    """FSM state for renaming a user's outage slot inline."""
+    """FSM state for naming a user's outage slot during edit/add flow."""
 
     waiting_for_alias = State()
 
 
-@router.callback_query(F.data.startswith("slot_rename:"))
-async def cb_slot_rename(
+@router.callback_query(F.data.startswith("slot_keep_alias:"))
+async def cb_slot_keep_alias(
     query: Any,
     state: Optional[FSMContext] = None,
+    db: Optional[DatabaseRepository] = None,
     **kwargs: Any,
 ) -> None:
-    """Prompt user to enter a custom name for the selected slot."""
+    """Finish slot wizard keeping the current/default alias."""
+    if state is not None and hasattr(state, "clear"):
+        await state.clear()
+
+    if db is None:
+        db = await _get_db()
+
+    user = getattr(query, "from_user", None)
+    user_id = getattr(user, "id", 0) if user else 0
+
     data = getattr(query, "data", "") or ""
     parts = data.split(":")
     slot_num = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
 
-    if state is not None and hasattr(state, "set_state"):
-        await state.update_data(rename_slot_num=slot_num)
-        await state.set_state(SlotRenameState.waiting_for_alias)
+    slots = await db.slots.get_slots_for_user(user_id)
+    slot = next((s for s in slots if getattr(s, "slot_number", None) == slot_num), None)
+    alias = getattr(slot, "alias", None) or ("Дім" if slot_num == 1 else "Офіс")
+    region_code = getattr(slot, "region_code", "") if slot else ""
+    if hasattr(region_code, "value"):
+        region_code = region_code.value
+    subgroup_id = getattr(slot, "subgroup_id", "") if slot else ""
 
-    text = (
-        f"✏️ <b>Нова назва для Слота {slot_num}</b>\n\n"
-        "Надішліть нову назву (до 16 символів, наприклад: <i>Квартира</i> або <i>Робота</i>).\n"
-        "Для скасування надішліть /cancel."
-    )
-    msg = getattr(query, "message", None)
-    await _edit_or_answer(msg, text, parse_mode="HTML")
+    if slot_num == 2:
+        from bot.handlers.keyboards import InlineKeyboardButton, InlineKeyboardMarkup
+        joint_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Так, увімкнути", callback_data="slot_joint:1"),
+                    InlineKeyboardButton(text="❌ Ні, вимкнути", callback_data="slot_joint:0"),
+                ]
+            ]
+        )
+        text = (
+            f"✅ <b>Слот {slot_num} збережено!</b> ({alias}, Черга {subgroup_id})\n\n"
+            "📊 <b>Увімкнути спільний графік («Спільний»)?</b>\n"
+            "Він показує спільну наявність світла для обох локацій."
+        )
+        msg = getattr(query, "message", None)
+        await _edit_or_answer(msg, text, reply_markup=joint_kb, parse_mode="HTML")
+    else:
+        text = (
+            f"✅ <b>Слот {slot_num} успішно збережено!</b>\n\n"
+            f"• Назва: <b>{alias}</b>\n"
+            f"• Регіон: <code>{region_code}</code>\n"
+            f"• Черга: <b>{subgroup_id}</b>\n\n"
+            "Тепер ви можете переглянути актуальний графік або налаштувати інший слот."
+        )
+        msg = getattr(query, "message", None)
+        await _edit_or_answer(msg, text, reply_markup=build_slots_keyboard(slots), parse_mode="HTML")
 
     if hasattr(query, "answer"):
         try:
-            await query.answer()
+            await query.answer("Чергу збережено! ✅")
         except Exception:
             pass
 
@@ -405,12 +450,96 @@ async def msg_slot_rename(
     )
 
     slots = await db.slots.get_slots_for_user(user_id)
-    if hasattr(message, "answer"):
-        await message.answer(
-            f"✅ Назву <b>Слота {slot_num}</b> змінено на <b>{new_alias}</b>.",
-            parse_mode="HTML",
-            reply_markup=build_slots_keyboard(slots),
+    if slot_num == 2:
+        from bot.handlers.keyboards import InlineKeyboardButton, InlineKeyboardMarkup
+        joint_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Так, увімкнути", callback_data="slot_joint:1"),
+                    InlineKeyboardButton(text="❌ Ні, вимкнути", callback_data="slot_joint:0"),
+                ]
+            ]
         )
+        if hasattr(message, "answer"):
+            await message.answer(
+                f"✅ Назву <b>Слота {slot_num}</b> змінено на <b>{new_alias}</b>.\n\n"
+                "📊 <b>Увімкнути спільний графік («Спільний»)?</b>\n"
+                "Він показує спільну наявність світла для обох локацій.",
+                parse_mode="HTML",
+                reply_markup=joint_kb,
+            )
+    else:
+        if hasattr(message, "answer"):
+            await message.answer(
+                f"✅ Назву <b>Слота {slot_num}</b> змінено на <b>{new_alias}</b>.",
+                parse_mode="HTML",
+                reply_markup=build_slots_keyboard(slots),
+            )
+
+
+@router.callback_query(F.data.startswith("slot_joint:"))
+async def cb_slot_joint(
+    query: Any,
+    db: Optional[DatabaseRepository] = None,
+    **kwargs: Any,
+) -> None:
+    """Save joint timeline preference at the end of Slot 2 setup."""
+    if db is None:
+        db = await _get_db()
+
+    user = getattr(query, "from_user", None)
+    user_id = getattr(user, "id", 0) if user else 0
+
+    data = getattr(query, "data", "") or ""
+    enable_joint = data.endswith(":1")
+    await db.settings.update_settings(user_id, show_joint_timeline=enable_joint)
+
+    slots = await db.slots.get_slots_for_user(user_id)
+    joint_label = "увімкнено ✅" if enable_joint else "вимкнено ❌"
+    text = (
+        f"✅ <b>Слот 2 налаштовано!</b>\n"
+        f"• Спільний графік: <b>{joint_label}</b>\n\n"
+        "Тепер ви можете переглянути актуальний графік або змінити параметри у /settings."
+    )
+    msg = getattr(query, "message", None)
+    await _edit_or_answer(msg, text, reply_markup=build_slots_keyboard(slots), parse_mode="HTML")
+
+    if hasattr(query, "answer"):
+        try:
+            await query.answer()
+        except Exception:
+            pass
+
+
+@router.callback_query(F.data == "toggle_joint_timeline")
+async def cb_toggle_joint_timeline(
+    query: Any,
+    db: Optional[DatabaseRepository] = None,
+    **kwargs: Any,
+) -> None:
+    """Toggle optional joint timeline visibility in Settings."""
+    if db is None:
+        db = await _get_db()
+
+    user = getattr(query, "from_user", None)
+    user_id = getattr(user, "id", 0) if user else 0
+
+    current = await db.settings.get_settings(user_id)
+    new_val = not bool(getattr(current, "show_joint_timeline", False))
+    updated = await db.settings.update_settings(user_id, show_joint_timeline=new_val)
+
+    msg = getattr(query, "message", None)
+    if msg and hasattr(msg, "edit_reply_markup"):
+        try:
+            await msg.edit_reply_markup(reply_markup=build_settings_keyboard(updated))
+        except Exception:
+            pass
+
+    if hasattr(query, "answer"):
+        try:
+            await query.answer(f"Спільний графік {'увімкнено ✅' if new_val else 'вимкнено ❌'}")
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data.startswith("slot_delete:"))

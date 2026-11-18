@@ -136,10 +136,6 @@ def build_slots_keyboard(slots: List[Any]) -> InlineKeyboardMarkup:
                     text=f"📍 Слот 1: {alias} ({subgroup})",
                     callback_data="slot_edit:1",
                 ),
-                InlineKeyboardButton(
-                    text="✏️ Назва",
-                    callback_data="slot_rename:1",
-                ),
             ])
         elif slot_num == 2:
             has_slot2 = True
@@ -149,11 +145,7 @@ def build_slots_keyboard(slots: List[Any]) -> InlineKeyboardMarkup:
                     callback_data="slot_edit:2",
                 ),
                 InlineKeyboardButton(
-                    text="✏️ Назва",
-                    callback_data="slot_rename:2",
-                ),
-                InlineKeyboardButton(
-                    text="🗑 Видалити",
+                    text="🗑 Видалити Слот 2",
                     callback_data="slot_delete:2",
                 ),
             ])
@@ -258,6 +250,7 @@ def build_settings_keyboard(settings: Any) -> InlineKeyboardMarkup:
     n30 = bool(getattr(settings, "notify_30m", True))
     n15 = bool(getattr(settings, "notify_15m", True))
     n_diff = bool(getattr(settings, "notify_schedule_change", True))
+    show_joint = bool(getattr(settings, "show_joint_timeline", False))
 
     sh_start = getattr(settings, "silent_hours_start", 23)
     sh_end = getattr(settings, "silent_hours_end", 7)
@@ -265,8 +258,12 @@ def build_settings_keyboard(settings: Any) -> InlineKeyboardMarkup:
     status_30 = "🔔 Увімк" if n30 else "🔕 Вимк"
     status_15 = "🔔 Увімк" if n15 else "🔕 Вимк"
     status_diff = "🔔 Увімк" if n_diff else "🔕 Вимк"
+    status_joint = "✅ Увімк" if show_joint else "❌ Вимк"
 
     keyboard = [
+        [
+            InlineKeyboardButton(text=f"📊 Спільний графік: {status_joint}", callback_data="toggle_joint_timeline"),
+        ],
         [
             InlineKeyboardButton(text=f"Попередження за 30 хв: {status_30}", callback_data="toggle_notif:30m"),
         ],

@@ -55,6 +55,7 @@ class NotificationSettingsRecord:
     notify_schedule_change: bool = True
     silent_hours_start: int = 23
     silent_hours_end: int = 7
+    show_joint_timeline: bool = False
     updated_at: Optional[str] = None
 
 
@@ -389,22 +390,24 @@ class NotificationSettingsRepository:
         notify_schedule_change: bool = True,
         silent_hours_start: int = 23,
         silent_hours_end: int = 7,
+        show_joint_timeline: bool = False,
         conn: Optional[Union[aiosqlite.Connection, Any]] = None,
     ) -> NotificationSettingsRecord:
         sql = """
         INSERT INTO notification_settings (
             user_id, notify_30m, notify_15m, notify_schedule_change,
-            silent_hours_start, silent_hours_end, updated_at
+            silent_hours_start, silent_hours_end, show_joint_timeline, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(user_id) DO UPDATE SET
             notify_30m = excluded.notify_30m,
             notify_15m = excluded.notify_15m,
             notify_schedule_change = excluded.notify_schedule_change,
             silent_hours_start = excluded.silent_hours_start,
             silent_hours_end = excluded.silent_hours_end,
+            show_joint_timeline = excluded.show_joint_timeline,
             updated_at = CURRENT_TIMESTAMP
-        RETURNING user_id, notify_30m, notify_15m, notify_schedule_change, silent_hours_start, silent_hours_end, updated_at;
+        RETURNING user_id, notify_30m, notify_15m, notify_schedule_change, silent_hours_start, silent_hours_end, show_joint_timeline, updated_at;
         """
         params = (
             user_id,
@@ -413,6 +416,7 @@ class NotificationSettingsRepository:
             int(notify_schedule_change),
             silent_hours_start,
             silent_hours_end,
+            int(show_joint_timeline),
         )
         if conn is not None:
             cur = await conn.execute(sql, params)
@@ -431,6 +435,7 @@ class NotificationSettingsRepository:
             notify_schedule_change=bool(row["notify_schedule_change"]),
             silent_hours_start=row["silent_hours_start"],
             silent_hours_end=row["silent_hours_end"],
+            show_joint_timeline=bool(row["show_joint_timeline"]),
             updated_at=row["updated_at"],
         )
 
@@ -441,7 +446,7 @@ class NotificationSettingsRepository:
     ) -> NotificationSettingsRecord:
         sql = """
         SELECT user_id, notify_30m, notify_15m, notify_schedule_change,
-               silent_hours_start, silent_hours_end, updated_at
+               silent_hours_start, silent_hours_end, show_joint_timeline, updated_at
         FROM notification_settings
         WHERE user_id = ?;
         """
@@ -464,6 +469,7 @@ class NotificationSettingsRepository:
             notify_schedule_change=bool(row["notify_schedule_change"]),
             silent_hours_start=row["silent_hours_start"],
             silent_hours_end=row["silent_hours_end"],
+            show_joint_timeline=bool(row["show_joint_timeline"]),
             updated_at=row["updated_at"],
         )
 
@@ -475,6 +481,7 @@ class NotificationSettingsRepository:
         notify_schedule_change: Optional[bool] = None,
         silent_hours_start: Optional[int] = None,
         silent_hours_end: Optional[int] = None,
+        show_joint_timeline: Optional[bool] = None,
         conn: Optional[Union[aiosqlite.Connection, Any]] = None,
     ) -> NotificationSettingsRecord:
         current = await self.get_settings(user_id, conn=conn)
@@ -485,6 +492,7 @@ class NotificationSettingsRepository:
             notify_schedule_change=current.notify_schedule_change if notify_schedule_change is None else notify_schedule_change,
             silent_hours_start=current.silent_hours_start if silent_hours_start is None else silent_hours_start,
             silent_hours_end=current.silent_hours_end if silent_hours_end is None else silent_hours_end,
+            show_joint_timeline=current.show_joint_timeline if show_joint_timeline is None else show_joint_timeline,
             conn=conn,
         )
 

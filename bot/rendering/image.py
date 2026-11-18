@@ -182,7 +182,7 @@ def _render_fallback_png(timeline_data: Any, **kwargs: Any) -> bytes:
     return sig + ihdr_chunk + phys_chunk + idat_chunk + iend_chunk
 
 
-def render_timeline_png(timeline_data: Any, **kwargs: Any) -> bytes:
+def render_timeline_png(timeline_data: Any, show_joint: bool = True, **kwargs: Any) -> bytes:
     """
     Render 1200x640 2x Retina PNG card for dual-slot or single-slot schedule.
     Returns PNG buffer as raw bytes.
@@ -253,10 +253,13 @@ def render_timeline_png(timeline_data: Any, **kwargs: Any) -> bytes:
     draw.text((25, 202), f"1: {alias_a[:4]}", fill=(148, 163, 184, 255), font=font_label)
     if not single_mode:
         draw.text((25, 282), f"2: {alias_b[:4]}", fill=(148, 163, 184, 255), font=font_label)
-        draw.text((25, 357), "Спільний", fill=(148, 163, 184, 255), font=font_label)
     else:
         draw.text((25, 282), "—", fill=(100, 116, 139, 255), font=font_label)
-        draw.text((25, 357), "Спільний", fill=(148, 163, 184, 255), font=font_label)
+
+    if show_joint:
+        # Visual separator between main slot lanes and optional joint lane
+        draw.line([(25, 336), (1120, 336)], fill=(51, 65, 85, 255), width=2)
+        draw.text((25, 369), "Спільний", fill=(251, 191, 36, 255), font=font_label)
 
     # Time ticks above Lane 1 (Y: 155)
     for hour in range(0, 25, 3):
@@ -264,7 +267,7 @@ def render_timeline_png(timeline_data: Any, **kwargs: Any) -> bytes:
         tx = int(x_start + (slot_idx + (0.5 if hour < 24 else 0)) * slot_w)
         draw.text((tx - 8, 155), f"{hour:02d}", fill=(100, 116, 139, 255), font=font_label)
 
-    # Draw 48 slots across Lane 1, Lane 2, Lane 3
+    # Draw 48 slots across Lane 1, Lane 2, and optional Lane 3
     for i in range(48):
         x0 = int(x_start + i * slot_w)
         x1 = int(x_start + (i + 1) * slot_w)
@@ -288,16 +291,18 @@ def render_timeline_png(timeline_data: Any, **kwargs: Any) -> bytes:
         # Lane 2 (Y: 260..320, midpoint 290)
         draw.rectangle([(x0, 260), (x1, 320)], fill=c2)
 
-        # Lane 3 Joint Opportunity (Y: 340..390, midpoint 365)
-        draw.rectangle([(x0, 340), (x1, 390)], fill=c3)
+        # Lane 3 Joint Opportunity (Y: 352..402, visually separated below divider)
+        if show_joint:
+            draw.rectangle([(x0, 352), (x1, 402)], fill=c3)
 
         # Draw 1px interval boundary dividers
         if i > 0:
             draw.line([(x0, 180), (x0, 240)], fill=canvas_bg, width=1)
             draw.line([(x0, 260), (x0, 320)], fill=canvas_bg, width=1)
-            draw.line([(x0, 340), (x0, 390)], fill=canvas_bg, width=1)
+            if show_joint:
+                draw.line([(x0, 352), (x0, 402)], fill=canvas_bg, width=1)
 
-    # 3. Dynamic "Now" Needle (Y: 160..410)
+    # 3. Dynamic "Now" Needle
     raw_idx = _extract_timeline_field(summary, "current_slot_index", 0)
     try:
         cur_idx = int(raw_idx) if raw_idx is not None else 0
@@ -307,7 +312,8 @@ def render_timeline_png(timeline_data: Any, **kwargs: Any) -> bytes:
     now_x = int(x_start + (cur_idx + 0.5) * slot_w)
 
     # Needle 3px red line (#EF4444)
-    draw.line([(now_x, 160), (now_x, 410)], fill=(239, 68, 68, 255), width=3)
+    needle_bottom = 420 if show_joint else 340
+    draw.line([(now_x, 160), (now_x, needle_bottom)], fill=(239, 68, 68, 255), width=3)
     # Needle indicator flag
     draw.polygon([(now_x - 5, 150), (now_x + 5, 150), (now_x, 159)], fill=(239, 68, 68, 255))
 
@@ -323,7 +329,7 @@ def render_timeline_png(timeline_data: Any, **kwargs: Any) -> bytes:
         (80, 320, (34, 197, 94, 255), f"Всюди: {both_on_h}г"),
         (345, 585, (59, 130, 246, 255), f"{alias_a[:5]}: {g1_only_h}г"),
         (610, 850, (139, 92, 246, 255), f"{alias_b[:5]}: {g2_only_h}г" if not single_mode else f"Сіра: {uncertain_h}г"),
-        (875, 1120, (239, 68, 68, 255), f"Блекаут: {both_off_h}г"),
+        (875, 1120, (239, 68, 68, 255), f"Відсутнє: {both_off_h}г"),
     ]
 
     for px0, px1, accent_c, ptext in pills_config:
