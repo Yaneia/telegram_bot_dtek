@@ -896,7 +896,9 @@
         jointBadge.style.backgroundColor = `${item.color}33`;
         jointBadge.style.color = item.color;
         jointBadge.style.borderColor = item.color;
-        jointBadge.textContent = item.label;
+        jointBadge.textContent = item.label
+          .replace(/\[Slot 1\]/g, appState.slotA.alias)
+          .replace(/\[Slot 2\]/g, appState.slotB.alias);
 
         document.getElementById('card-slot-a-alias').textContent = appState.slotA.alias;
         const stateA = document.getElementById('card-slot-a-state');

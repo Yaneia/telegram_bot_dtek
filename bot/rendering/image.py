@@ -209,6 +209,8 @@ def render_timeline_png(timeline_data: Any, show_joint: bool = True, **kwargs: A
 
     alias_a = str(_extract_timeline_field(slot_a, "alias", "Дім") or "Дім")
     alias_b = str(_extract_timeline_field(slot_b, "alias", "Офіс") or "Офіс") if not single_mode else ""
+    subgrp_a = str(_extract_timeline_field(slot_a, "subgroup_id", "") or "")
+    subgrp_b = str(_extract_timeline_field(slot_b, "subgroup_id", "") or "") if not single_mode else ""
 
     summary = _extract_timeline_field(timeline_data, "summary") or {}
     raw_timeline = _extract_timeline_field(timeline_data, "timeline") or []
@@ -244,22 +246,32 @@ def render_timeline_png(timeline_data: Any, show_joint: bool = True, **kwargs: A
     draw.rounded_rectangle([(970, 28), (1165, 62)], radius=8, outline=badge_color, width=1)
     draw.text((985, 36), badge_text, fill=badge_color, font=font_subtitle)
 
-    # 2. Lanes geometry (X: 80..1120, total width 1040)
-    x_start = 80
+    # 2. Lanes geometry (X: 100..1140, total width 1040)
+    x_start = 100
     lane_width = 1040.0
     slot_w = lane_width / 48.0
 
-    # Lane labels
-    draw.text((25, 202), f"1: {alias_a[:4]}", fill=(148, 163, 184, 255), font=font_label)
-    if not single_mode:
-        draw.text((25, 282), f"2: {alias_b[:4]}", fill=(148, 163, 184, 255), font=font_label)
+    # Lane labels (group number + full alias on two crisp lines, no truncation)
+    font_sub = _get_font(12)
+    if subgrp_a:
+        draw.text((18, 193), subgrp_a, fill=(96, 165, 250, 255), font=font_label)
+        draw.text((18, 211), alias_a[:11], fill=(203, 213, 225, 255), font=font_sub)
     else:
-        draw.text((25, 282), "—", fill=(100, 116, 139, 255), font=font_label)
+        draw.text((18, 202), alias_a[:11], fill=(203, 213, 225, 255), font=font_label)
+
+    if not single_mode:
+        if subgrp_b:
+            draw.text((18, 273), subgrp_b, fill=(192, 132, 252, 255), font=font_label)
+            draw.text((18, 291), alias_b[:11], fill=(203, 213, 225, 255), font=font_sub)
+        else:
+            draw.text((18, 282), alias_b[:11], fill=(203, 213, 225, 255), font=font_label)
+    else:
+        draw.text((18, 282), "—", fill=(100, 116, 139, 255), font=font_label)
 
     if show_joint:
         # Visual separator between main slot lanes and optional joint lane
-        draw.line([(25, 336), (1120, 336)], fill=(51, 65, 85, 255), width=2)
-        draw.text((16, 369), "Спільний", fill=(251, 191, 36, 255), font=font_label)
+        draw.line([(18, 336), (1140, 336)], fill=(51, 65, 85, 255), width=2)
+        draw.text((18, 369), "Спільний", fill=(251, 191, 36, 255), font=font_label)
 
     # Time ticks above Lane 1 (Y: 155)
     for hour in range(0, 25, 3):
@@ -327,8 +339,8 @@ def render_timeline_png(timeline_data: Any, show_joint: bool = True, **kwargs: A
 
     pills_config = [
         (80, 320, (34, 197, 94, 255), (34, 197, 94, 255), f"Всюди: {both_on_h}г"),
-        (345, 585, (59, 130, 246, 255), (59, 130, 246, 255), f"{alias_a[:5]}: {g1_only_h}г"),
-        (610, 850, (139, 92, 246, 255), (139, 92, 246, 255), f"{alias_b[:5]}: {g2_only_h}г" if not single_mode else f"Сіра: {uncertain_h}г"),
+        (345, 585, (59, 130, 246, 255), (59, 130, 246, 255), f"{alias_a[:12]}: {g1_only_h}г"),
+        (610, 850, (139, 92, 246, 255), (139, 92, 246, 255), f"{alias_b[:12]}: {g2_only_h}г" if not single_mode else f"Сіра: {uncertain_h}г"),
         (875, 1120, COLOR_MAP_RGB["BOTH_OFF"], (75, 85, 99, 255), f"Відключення: {both_off_h}г"),
     ]
 
