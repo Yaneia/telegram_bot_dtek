@@ -17,6 +17,7 @@ class UserRecord:
     chat_id: int
     first_name: str
     username: Optional[str] = None
+    thread_id: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     is_active: bool = True
@@ -95,21 +96,23 @@ class UserRepository:
         chat_id: int,
         first_name: str,
         username: Optional[str] = None,
+        thread_id: Optional[int] = None,
         is_active: bool = True,
         conn: Optional[Union[aiosqlite.Connection, Any]] = None,
     ) -> UserRecord:
         sql = """
-        INSERT INTO users (user_id, chat_id, first_name, username, is_active, updated_at)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT INTO users (user_id, chat_id, thread_id, first_name, username, is_active, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(user_id) DO UPDATE SET
             chat_id = excluded.chat_id,
+            thread_id = excluded.thread_id,
             first_name = excluded.first_name,
             username = excluded.username,
             is_active = excluded.is_active,
             updated_at = CURRENT_TIMESTAMP
-        RETURNING user_id, chat_id, first_name, username, created_at, updated_at, is_active;
+        RETURNING user_id, chat_id, thread_id, first_name, username, created_at, updated_at, is_active;
         """
-        params = (user_id, chat_id, first_name, username, int(is_active))
+        params = (user_id, chat_id, thread_id, first_name, username, int(is_active))
 
         if conn is not None:
             cur = await conn.execute(sql, params)
@@ -124,6 +127,7 @@ class UserRepository:
         return UserRecord(
             user_id=row["user_id"],
             chat_id=row["chat_id"],
+            thread_id=row["thread_id"],
             first_name=row["first_name"],
             username=row["username"],
             created_at=row["created_at"],
@@ -136,7 +140,7 @@ class UserRepository:
         user_id: int,
         conn: Optional[Union[aiosqlite.Connection, Any]] = None,
     ) -> Optional[UserRecord]:
-        sql = "SELECT user_id, chat_id, first_name, username, created_at, updated_at, is_active FROM users WHERE user_id = ?;"
+        sql = "SELECT user_id, chat_id, thread_id, first_name, username, created_at, updated_at, is_active FROM users WHERE user_id = ?;"
         if conn is not None:
             cur = await conn.execute(sql, (user_id,))
             row = await cur.fetchone()
@@ -150,6 +154,7 @@ class UserRepository:
         return UserRecord(
             user_id=row["user_id"],
             chat_id=row["chat_id"],
+            thread_id=row["thread_id"],
             first_name=row["first_name"],
             username=row["username"],
             created_at=row["created_at"],
@@ -347,7 +352,7 @@ class UserSlotsRepository:
         _, norm_subgroup = self.normalize_subgroup(None, subgroup_id)
 
         sql = """
-        SELECT u.user_id, u.chat_id, u.first_name, s.slot_number, s.alias, s.region_code, s.group_id, s.subgroup_id
+        SELECT u.user_id, u.chat_id, u.thread_id, u.first_name, s.slot_number, s.alias, s.region_code, s.group_id, s.subgroup_id
         FROM user_slots s
         JOIN users u ON s.user_id = u.user_id
         WHERE s.region_code = ? AND s.subgroup_id = ? AND u.is_active = 1;
@@ -365,6 +370,7 @@ class UserSlotsRepository:
             {
                 "user_id": r["user_id"],
                 "chat_id": r["chat_id"],
+                "thread_id": r["thread_id"],
                 "first_name": r["first_name"],
                 "slot_number": r["slot_number"],
                 "alias": r["alias"],

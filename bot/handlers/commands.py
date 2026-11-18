@@ -121,6 +121,42 @@ def _get_scraper() -> ScraperCascade:
 # /start COMMAND HANDLER
 # ============================================================================
 
+def resolve_chat_scope(source: Any) -> tuple[int, int, Optional[int], bool, str, Optional[str]]:
+    """
+    Resolve storage scope for private chats, groups, and forum topics.
+
+    Returns: (owner_id, chat_id, thread_id, is_group, display_name, username)
+    - Private chat: owner_id = from_user.id (positive)
+    - Group (no topic): owner_id = chat.id (negative)
+    - Forum topic: owner_id = -(abs(chat.id) * 1_000_000 + (thread_id % 1_000_000))
+    """
+    msg = getattr(source, "message", None) or source
+    chat = getattr(msg, "chat", None)
+    user = getattr(source, "from_user", None)
+    user_id = getattr(user, "id", 0) if user else 0
+    chat_type = getattr(chat, "type", "private") if chat else "private"
+
+    if chat is not None and chat_type in ("group", "supergroup"):
+        chat_id = int(getattr(chat, "id", user_id))
+        is_forum = bool(getattr(chat, "is_forum", False))
+        raw_tid = getattr(msg, "message_thread_id", None)
+        is_topic = bool(getattr(msg, "is_topic_message", False))
+        thread_id = int(raw_tid) if (raw_tid is not None and (is_forum or is_topic)) else None
+
+        if thread_id is not None:
+            owner_id = -(abs(chat_id) * 1_000_000 + (thread_id % 1_000_000))
+        else:
+            owner_id = chat_id
+
+        title = getattr(chat, "title", None) or "Група"
+        return owner_id, chat_id, thread_id, True, str(title), getattr(chat, "username", None)
+
+    chat_id = int(getattr(chat, "id", user_id)) if chat else int(user_id)
+    first_name = (getattr(user, "first_name", None) if user else None) or "Користувач"
+    username = getattr(user, "username", None) if user else None
+    return int(user_id), chat_id, None, False, str(first_name), username
+
+
 @router.message(CommandStart())
 async def cmd_start(
     message: Any,
@@ -130,23 +166,20 @@ async def cmd_start(
 ) -> None:
     """
     Handle /start command.
-    Registers user in SQLite, initializes settings, and processes deep-link
+    Registers user/group/topic in SQLite, initializes settings, and processes deep-link
     sync payload (sync_<b64>) if provided.
     """
     if db is None:
         db = await _get_db()
 
-    user = getattr(message, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
-    chat_id = getattr(getattr(message, "chat", None), "id", user_id)
-    first_name = getattr(user, "first_name", "Користувач") or "Користувач"
-    username = getattr(user, "username", None)
+    user_id, chat_id, thread_id, is_group, first_name, username = resolve_chat_scope(message)
 
-    # Register or touch user in SQLite
-    if user_id > 0:
+    # Register or touch user/group/topic in SQLite
+    if user_id != 0:
         await db.users.upsert_user(
             user_id=user_id,
             chat_id=chat_id,
+            thread_id=thread_id,
             first_name=first_name,
             username=username,
         )
@@ -202,7 +235,7 @@ async def cmd_start(
                 await message.answer(
                     "\n".join(msg_lines),
                     parse_mode="HTML",
-                    reply_markup=build_main_menu_keyboard(get_settings().WEBAPP_URL),
+                    reply_markup=build_main_menu_keyboard(get_settings().WEBAPP_URL, is_group=is_group),
                 )
             return
         except Exception as exc:
@@ -228,7 +261,7 @@ async def cmd_start(
         await message.answer(
             welcome_text,
             parse_mode="HTML",
-            reply_markup=build_main_menu_keyboard(settings.WEBAPP_URL),
+            reply_markup=build_main_menu_keyboard(settings.WEBAPP_URL, is_group=is_group),
         )
 
 
@@ -255,9 +288,9 @@ async def cmd_status(
     if scraper is None:
         scraper = _get_scraper()
 
+    resolved_id, _, _, is_group, _, _ = resolve_chat_scope(message)
     if user_id is None:
-        user = getattr(message, "from_user", None)
-        user_id = getattr(user, "id", 0) if user else 0
+        user_id = resolved_id
 
     slots = await db.slots.get_slots_for_user(user_id)
     if not slots:
@@ -309,7 +342,7 @@ async def cmd_status(
 
     # Determine render mode (image vs text)
     current_mode = USER_RENDER_MODES.get(user_id, settings.DEFAULT_RENDER_MODE)
-    keyboard = build_status_keyboard(tma_url=tma_url, current_mode=current_mode)
+    keyboard = build_status_keyboard(tma_url=tma_url, current_mode=current_mode, is_group=is_group)
 
     if current_mode == "image":
         try:
@@ -357,8 +390,7 @@ async def cmd_slots(
     if db is None:
         db = await _get_db()
 
-    user = getattr(message, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id, _, _, _, _, _ = resolve_chat_scope(message)
 
     slots = await db.slots.get_slots_for_user(user_id)
 
@@ -397,8 +429,7 @@ async def cmd_settings(
     if db is None:
         db = await _get_db()
 
-    user = getattr(message, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id, _, _, _, _, _ = resolve_chat_scope(message)
 
     settings_record = await db.settings.get_settings(user_id)
 
@@ -444,11 +475,12 @@ async def cmd_help(message: Any, **kwargs: Any) -> None:
         "/help — ця довідка"
     )
 
+    _, _, _, is_group, _, _ = resolve_chat_scope(message)
     if hasattr(message, "answer"):
         await message.answer(
             help_text,
             parse_mode="HTML",
-            reply_markup=build_help_keyboard(settings.WEBAPP_URL),
+            reply_markup=build_help_keyboard(settings.WEBAPP_URL, is_group=is_group),
         )
 
 

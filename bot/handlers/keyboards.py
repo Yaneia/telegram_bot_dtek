@@ -51,16 +51,20 @@ except ImportError:
 # KEYBOARD BUILDERS
 # ============================================================================
 
-def build_status_keyboard(tma_url: str, current_mode: str = "image") -> InlineKeyboardMarkup:
+def _tma_button(text: str, tma_url: str, is_group: bool = False) -> InlineKeyboardButton:
+    """Use WebAppInfo in private chats and plain URL in groups/topics (Telegram API forbids web_app in groups)."""
+    if is_group:
+        return InlineKeyboardButton(text=text, url=tma_url)
+    return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=tma_url))
+
+
+def build_status_keyboard(tma_url: str, current_mode: str = "image", is_group: bool = False) -> InlineKeyboardMarkup:
     """Build timeline presentation keyboard with TMA WebAppInfo button and actions."""
     toggle_text = "📝 Текстовий режим" if current_mode == "image" else "🖼 Графічний режим"
 
     keyboard = [
         [
-            InlineKeyboardButton(
-                text="📱 Відкрити інтерактивний графік (TMA)",
-                web_app=WebAppInfo(url=tma_url),
-            )
+            _tma_button("📱 Відкрити інтерактивний графік (TMA)", tma_url, is_group=is_group)
         ],
         [
             InlineKeyboardButton(text="🔄 Оновити", callback_data="refresh_schedule"),
@@ -74,7 +78,7 @@ def build_status_keyboard(tma_url: str, current_mode: str = "image") -> InlineKe
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def build_main_menu_keyboard(webapp_url: Optional[str] = None) -> InlineKeyboardMarkup:
+def build_main_menu_keyboard(webapp_url: Optional[str] = None, is_group: bool = False) -> InlineKeyboardMarkup:
     """Build bot welcome and main menu keyboard."""
     row1 = [
         InlineKeyboardButton(text="⚡ Поточний графік", callback_data="refresh_schedule"),
@@ -89,10 +93,7 @@ def build_main_menu_keyboard(webapp_url: Optional[str] = None) -> InlineKeyboard
         rows.insert(
             0,
             [
-                InlineKeyboardButton(
-                    text="📱 Відкрити Mini App",
-                    web_app=WebAppInfo(url=webapp_url),
-                )
+                _tma_button("📱 Відкрити Mini App", webapp_url, is_group=is_group)
             ],
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -287,15 +288,12 @@ def build_settings_keyboard(settings: Any) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def build_help_keyboard(tma_url: Optional[str] = None) -> InlineKeyboardMarkup:
+def build_help_keyboard(tma_url: Optional[str] = None, is_group: bool = False) -> InlineKeyboardMarkup:
     """Build help screen keyboard."""
     rows: List[List[InlineKeyboardButton]] = []
     if tma_url:
         rows.append([
-            InlineKeyboardButton(
-                text="📱 Відкрити Mini App",
-                web_app=WebAppInfo(url=tma_url),
-            )
+            _tma_button("📱 Відкрити Mini App", tma_url, is_group=is_group)
         ])
     rows.append([
         InlineKeyboardButton(text="⚡ Поточний графік", callback_data="refresh_schedule"),

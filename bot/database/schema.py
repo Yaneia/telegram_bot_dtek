@@ -9,6 +9,7 @@ SCHEMA_DDL = """
 CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
     chat_id INTEGER NOT NULL,
+    thread_id INTEGER DEFAULT NULL,
     username TEXT,
     first_name TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -96,6 +97,12 @@ async def init_db(conn: Union[aiosqlite.Connection, Any]) -> None:
         try:
             await conn.execute(
                 "ALTER TABLE notification_settings ADD COLUMN show_joint_timeline BOOLEAN DEFAULT 0;"
+            )
+        except Exception:
+            pass
+        try:
+            await conn.execute(
+                "ALTER TABLE users ADD COLUMN thread_id INTEGER DEFAULT NULL;"
             )
         except Exception:
             pass

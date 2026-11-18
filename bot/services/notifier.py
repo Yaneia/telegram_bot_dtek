@@ -365,13 +365,22 @@ class NotifierService:
                 if asyncio.iscoroutine(commit_res):
                     await commit_res
 
-    async def _send_telegram_message(self, chat_id: int, text: str, user_id: int) -> bool:
+    async def _send_telegram_message(
+        self,
+        chat_id: int,
+        text: str,
+        user_id: int,
+        thread_id: Optional[int] = None,
+    ) -> bool:
         """
         Dispatch message to Telegram API with 429 backoff and 403 Forbidden user deactivation.
         """
         try:
             if hasattr(self.bot, "send_message"):
-                res = self.bot.send_message(chat_id=chat_id, text=text)
+                send_kwargs: Dict[str, Any] = {"chat_id": chat_id, "text": text}
+                if thread_id is not None:
+                    send_kwargs["message_thread_id"] = thread_id
+                res = self.bot.send_message(**send_kwargs)
                 if asyncio.iscoroutine(res):
                     await res
             return True
@@ -389,6 +398,7 @@ class NotifierService:
                 or "bot was blocked" in err_str
                 or "chat not found" in err_str
                 or "user is deactivated" in err_str
+                or "message thread not found" in err_str
                 or "403" in err_str
                 or getattr(exc, "code", None) == 403
             ):
@@ -499,7 +509,8 @@ class NotifierService:
         # Query all active users and their slots
         sql = """
         SELECT u.user_id, u.chat_id, u.first_name,
-               s.slot_number, s.alias, s.region_code, s.group_id, s.subgroup_id
+               s.slot_number, s.alias, s.region_code, s.group_id, s.subgroup_id,
+               u.thread_id
         FROM users u
         JOIN user_slots s ON u.user_id = s.user_id
         WHERE u.is_active = 1
@@ -522,10 +533,12 @@ class NotifierService:
             reg = r["region_code"] if isinstance(r, dict) or hasattr(r, "keys") else r[5]
             grp = r["group_id"] if isinstance(r, dict) or hasattr(r, "keys") else r[6]
             subgrp = r["subgroup_id"] if isinstance(r, dict) or hasattr(r, "keys") else r[7]
+            tid = r["thread_id"] if (isinstance(r, dict) or hasattr(r, "keys")) and "thread_id" in r.keys() else (r[8] if not isinstance(r, dict) and len(r) > 8 else None)
 
             if uid not in user_slots_map:
                 user_slots_map[uid] = {
                     "chat_id": cid,
+                    "thread_id": tid,
                     "first_name": fname,
                     "slots": {},
                 }
@@ -631,7 +644,12 @@ class NotifierService:
 
                         # Acquire token and dispatch
                         await self.rate_limiter.acquire()
-                        sent = await self._send_telegram_message(user_data["chat_id"], msg, user_id=uid)
+                        sent = await self._send_telegram_message(
+                            user_data["chat_id"],
+                            msg,
+                            user_id=uid,
+                            thread_id=user_data.get("thread_id"),
+                        )
                         if sent:
                             # Record notification in history
                             if hasattr(self.db, "history") and hasattr(self.db.history, "record_notification"):
@@ -796,7 +814,7 @@ class NotifierService:
                         subscribers = await self.db.slots.get_subscribers_by_subgroup(region, norm_sub)
                     else:
                         sub_sql = """
-                        SELECT u.user_id, u.chat_id, u.first_name, s.slot_number, s.alias, s.region_code, s.group_id, s.subgroup_id
+                        SELECT u.user_id, u.chat_id, u.first_name, s.slot_number, s.alias, s.region_code, s.group_id, s.subgroup_id, u.thread_id
                         FROM user_slots s
                         JOIN users u ON s.user_id = u.user_id
                         WHERE s.region_code = ? AND s.subgroup_id = ? AND u.is_active = 1;
@@ -807,6 +825,7 @@ class NotifierService:
                                 "user_id": sr["user_id"] if isinstance(sr, dict) or hasattr(sr, "keys") else sr[0],
                                 "chat_id": sr["chat_id"] if isinstance(sr, dict) or hasattr(sr, "keys") else sr[1],
                                 "slot_number": sr["slot_number"] if isinstance(sr, dict) or hasattr(sr, "keys") else sr[3],
+                                "thread_id": sr["thread_id"] if (isinstance(sr, dict) or hasattr(sr, "keys")) and "thread_id" in sr.keys() else (sr[8] if not isinstance(sr, dict) and len(sr) > 8 else None),
                             })
 
                     for sub in subscribers:
@@ -814,6 +833,7 @@ class NotifierService:
                             uid = sub["user_id"]
                             cid = sub["chat_id"]
                             snum = sub["slot_number"]
+                            tid = sub.get("thread_id")
 
                             # Check user notification settings
                             notify_change = True
@@ -861,7 +881,7 @@ class NotifierService:
 
                             diff_msg = format_schedule_diff_message(norm_sub, diffs)
                             await self.rate_limiter.acquire()
-                            sent = await self._send_telegram_message(cid, diff_msg, user_id=uid)
+                            sent = await self._send_telegram_message(cid, diff_msg, user_id=uid, thread_id=tid)
                             if sent:
                                 if hasattr(self.db, "history") and hasattr(self.db.history, "record_notification"):
                                     await self.db.history.record_notification(

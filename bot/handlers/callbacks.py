@@ -16,7 +16,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from bot.config import get_settings
 from bot.database.connection import DatabaseConnectionManager
 from bot.database.repository import DatabaseRepository
-from bot.handlers.commands import USER_RENDER_MODES, cmd_status
+from bot.handlers.commands import USER_RENDER_MODES, cmd_status, resolve_chat_scope
 from bot.handlers.keyboards import (
     build_group_keyboard,
     build_help_keyboard,
@@ -109,17 +109,18 @@ async def _get_db() -> DatabaseRepository:
 # SCHEDULE REFRESH & RENDER MODE TOGGLE
 # ============================================================================
 
-async def _ensure_user(db: DatabaseRepository, user: Any) -> int:
-    """Ensure a user row exists before inserting/updating child tables with FK constraints."""
-    user_id = getattr(user, "id", 0) if user else 0
-    if user_id and hasattr(db, "users") and hasattr(db.users, "upsert_user"):
+async def _ensure_user(db: DatabaseRepository, event: Any) -> int:
+    """Ensure a user/group/topic row exists before inserting/updating child tables with FK constraints."""
+    owner_id, chat_id, thread_id, _, first_name, username = resolve_chat_scope(event)
+    if owner_id != 0 and hasattr(db, "users") and hasattr(db.users, "upsert_user"):
         await db.users.upsert_user(
-            user_id=user_id,
-            username=getattr(user, "username", None),
-            first_name=getattr(user, "first_name", None),
-            language_code=getattr(user, "language_code", "uk") or "uk",
+            user_id=owner_id,
+            chat_id=chat_id,
+            thread_id=thread_id,
+            first_name=first_name,
+            username=username,
         )
-    return user_id
+    return owner_id
 
 
 async def _edit_or_answer(
@@ -155,12 +156,11 @@ async def cb_refresh_schedule(
         except Exception:
             pass
 
-    user = getattr(query, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id, _, _, _, _, _ = resolve_chat_scope(query)
 
     msg = getattr(query, "message", None)
     if msg:
-        # Delegate to cmd_status using the query sender
+        # Delegate to cmd_status using the resolved chat/topic scope
         await cmd_status(msg, db=db, user_id=user_id, **kwargs)
 
 
@@ -170,9 +170,8 @@ async def cb_toggle_render_mode(
     db: Optional[DatabaseRepository] = None,
     **kwargs: Any,
 ) -> None:
-    """Toggle between Image and Text rendering modes for user."""
-    user = getattr(query, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    """Toggle between Image and Text rendering modes for user/group/topic."""
+    user_id, _, _, _, _, _ = resolve_chat_scope(query)
 
     current = USER_RENDER_MODES.get(user_id, get_settings().DEFAULT_RENDER_MODE)
     new_mode = "text" if current == "image" else "image"
@@ -288,8 +287,7 @@ async def cb_slot_subgroup(
     if db is None:
         db = await _get_db()
 
-    user = getattr(query, "from_user", None)
-    user_id = await _ensure_user(db, user)
+    user_id = await _ensure_user(db, query)
 
     data = getattr(query, "data", "") or ""
     parts = data.split(":")
@@ -311,7 +309,7 @@ async def cb_slot_subgroup(
     )
 
     if state is not None and hasattr(state, "set_state"):
-        await state.update_data(rename_slot_num=slot_num)
+        await state.update_data(rename_slot_num=slot_num, rename_owner_id=user_id)
         await state.set_state(SlotRenameState.waiting_for_alias)
 
     from bot.handlers.keyboards import InlineKeyboardButton, InlineKeyboardMarkup
@@ -362,8 +360,7 @@ async def cb_slot_keep_alias(
     if db is None:
         db = await _get_db()
 
-    user = getattr(query, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id, _, _, _, _, _ = resolve_chat_scope(query)
 
     data = getattr(query, "data", "") or ""
     parts = data.split(":")
@@ -434,17 +431,15 @@ async def msg_slot_rename(
             await message.answer("Назва не може бути порожньою. Введіть назву до 16 символів або /cancel:")
         return
 
-    slot_num = 1
+    user_id, _, _, _, _, _ = resolve_chat_scope(message)
     if state is not None and hasattr(state, "get_data"):
         fsm_data = await state.get_data()
         slot_num = int(fsm_data.get("rename_slot_num", 1))
+        user_id = int(fsm_data.get("rename_owner_id", user_id))
         await state.clear()
 
     if db is None:
         db = await _get_db()
-
-    user = getattr(message, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
 
     existing = await db.slots.get_slot(user_id, slot_num)
     if existing is None:
@@ -500,8 +495,7 @@ async def cb_slot_joint(
     if db is None:
         db = await _get_db()
 
-    user = getattr(query, "from_user", None)
-    user_id = await _ensure_user(db, user)
+    user_id = await _ensure_user(db, query)
 
     data = getattr(query, "data", "") or ""
     enable_joint = data.endswith(":1")
@@ -534,8 +528,7 @@ async def cb_toggle_joint_timeline(
     if db is None:
         db = await _get_db()
 
-    user = getattr(query, "from_user", None)
-    user_id = await _ensure_user(db, user)
+    user_id = await _ensure_user(db, query)
 
     current = await db.settings.get_settings(user_id)
     new_val = not bool(getattr(current, "show_joint_timeline", False))
@@ -565,8 +558,7 @@ async def cb_slot_delete(
     if db is None:
         db = await _get_db()
 
-    user = getattr(query, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id, _, _, _, _, _ = resolve_chat_scope(query)
 
     data = getattr(query, "data", "") or ""
     parts = data.split(":")
@@ -603,8 +595,7 @@ async def cb_toggle_notif(
     if db is None:
         db = await _get_db()
 
-    user = getattr(query, "from_user", None)
-    user_id = await _ensure_user(db, user)
+    user_id = await _ensure_user(db, query)
 
     data = getattr(query, "data", "") or ""
     setting_key = data.split(":", 1)[1] if ":" in data else ""
@@ -648,8 +639,7 @@ async def cb_toggle_silent_hours(
     if db is None:
         db = await _get_db()
 
-    user = getattr(query, "from_user", None)
-    user_id = await _ensure_user(db, user)
+    user_id = await _ensure_user(db, query)
 
     settings_record = await db.settings.get_settings(user_id)
     cur_start = settings_record.silent_hours_start
@@ -686,8 +676,7 @@ async def cb_toggle_silent_hours(
 async def cb_menu_main(query: Any, **kwargs: Any) -> None:
     """Return to main menu."""
     settings = get_settings()
-    user = getattr(query, "from_user", None)
-    first_name = getattr(user, "first_name", "Користувач") or "Користувач"
+    _, _, _, is_group, first_name, _ = resolve_chat_scope(query)
     text = (
         f"Головне меню | Вітаємо, {first_name}! ⚡\n\n"
         "Оберіть потрібний розділ:"
@@ -696,7 +685,7 @@ async def cb_menu_main(query: Any, **kwargs: Any) -> None:
     await _edit_or_answer(
         msg,
         text,
-        reply_markup=build_main_menu_keyboard(settings.WEBAPP_URL),
+        reply_markup=build_main_menu_keyboard(settings.WEBAPP_URL, is_group=is_group),
         parse_mode="HTML",
     )
 
@@ -717,8 +706,7 @@ async def cb_menu_slots(
     if db is None:
         db = await _get_db()
 
-    user = getattr(query, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id, _, _, _, _, _ = resolve_chat_scope(query)
     slots = await db.slots.get_slots_for_user(user_id)
 
     lines = ["📍 <b>Керування чергами моніторингу</b>\n"]
@@ -759,8 +747,7 @@ async def cb_menu_settings(
     if db is None:
         db = await _get_db()
 
-    user = getattr(query, "from_user", None)
-    user_id = getattr(user, "id", 0) if user else 0
+    user_id, _, _, _, _, _ = resolve_chat_scope(query)
     settings_record = await db.settings.get_settings(user_id)
 
     text = (
@@ -793,11 +780,12 @@ async def cb_menu_help(query: Any, **kwargs: Any) -> None:
         "• /settings — налаштування сповіщень\n\n"
         "🟩 Світло є | ⬛ Світла немає | 🟨 Можливе | 🟥 Аварійні"
     )
+    _, _, _, is_group, _, _ = resolve_chat_scope(query)
     msg = getattr(query, "message", None)
     await _edit_or_answer(
         msg,
         text,
-        reply_markup=build_help_keyboard(settings.WEBAPP_URL),
+        reply_markup=build_help_keyboard(settings.WEBAPP_URL, is_group=is_group),
         parse_mode="HTML",
     )
 
@@ -825,8 +813,8 @@ async def handle_web_app_data(
     if db is None:
         db = await _get_db()
 
-    user = getattr(message, "from_user", None)
-    user_id = await _ensure_user(db, user)
+    user_id = await _ensure_user(db, message)
+    _, _, _, is_group, _, _ = resolve_chat_scope(message)
 
     web_app_data = getattr(message, "web_app_data", None)
     raw_json = getattr(web_app_data, "data", "{}") or "{}"
@@ -886,7 +874,7 @@ async def handle_web_app_data(
         await message.answer(
             resp,
             parse_mode="HTML",
-            reply_markup=build_main_menu_keyboard(get_settings().WEBAPP_URL),
+            reply_markup=build_main_menu_keyboard(get_settings().WEBAPP_URL, is_group=is_group),
         )
 
 
