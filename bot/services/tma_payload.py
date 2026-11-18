@@ -165,6 +165,9 @@ class TMAPayload:
                 "sched": status_str_b,
             }
 
+        updated_at = getattr(response, "updated_at", None) or (
+            response.get("updated_at") if isinstance(response, dict) else None
+        )
         payload: Dict[str, Any] = {
             "u": bot_username,
             "bot_username": bot_username,
@@ -172,6 +175,7 @@ class TMAPayload:
             "d": str(date_val),
             "date": str(date_val),
             "comparison_date": str(date_val),
+            **({"u_at": str(updated_at)} if updated_at else {}),
             "e": 1 if is_emergency else 0,
             "is_emergency": is_emergency,
             "s": 1 if stale else 0,

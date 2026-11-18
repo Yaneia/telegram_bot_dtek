@@ -404,14 +404,18 @@ class ScraperCascade:
             slots = Normalizer.normalize(hours_dict, is_emergency=False)
             groups[f"GPV{sgid}"] = SubgroupSchedule(group_id=gid, subgroup_id=sgid, slots=slots)
 
+        fact_update = None
+        if isinstance(data, dict) and isinstance(data.get("fact"), dict):
+            fact_update = data["fact"].get("update") or data["fact"].get("updateFact")
+
         return RegionalScheduleResponse(
             region_id=reg_str,
             region_name=REGION_NAMES.get(reg_enum, reg_str),
             date=data.get("date", today_str) if isinstance(data, dict) else today_str,
             updated_at=(
-                data.get("updated_at") or data.get("lastUpdated") or now_dt.isoformat()
-                if isinstance(data, dict)
-                else now_dt.isoformat()
+                fact_update
+                or (data.get("updated_at") or data.get("lastUpdated") if isinstance(data, dict) else None)
+                or now_dt.isoformat()
             ),
             is_emergency=data.get("is_emergency", False) if isinstance(data, dict) else False,
             emergency_message=data.get("emergency_message") if isinstance(data, dict) else None,
@@ -728,6 +732,9 @@ class ScraperCascade:
         sched_date = getattr(resp, "date", None) or (
             resp.get("date") if isinstance(resp, dict) else None
         )
+        updated_at = getattr(resp, "updated_at", None) or (
+            resp.get("updated_at") if isinstance(resp, dict) else None
+        )
 
         h = hashlib.sha256("".join(s.status.value for s in intervals).encode("utf-8")).hexdigest()
 
@@ -745,6 +752,7 @@ class ScraperCascade:
             is_stale=bool(is_stale),
             schedule_hash=h,
             hash=h,
+            updated_at=str(updated_at) if updated_at else None,
         )
         daily.data_source = str(data_source)
         daily.stale = bool(is_stale)

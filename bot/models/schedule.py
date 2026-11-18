@@ -170,6 +170,7 @@ class DailySchedule(_BaseClass):
     stale: bool = Field(default=False, description="Alias for is_stale")
     schedule_hash: Optional[str] = Field(default=None)
     hash: Optional[str] = Field(default=None)
+    updated_at: Optional[str] = Field(default=None)
 
     def __init__(self, **data: Any) -> None:
         if "region" in data and isinstance(data["region"], str):
@@ -244,6 +245,7 @@ class TwoGroupTimelineResponse(_BaseClass):
     """Full unified timeline comparison response for chat renderers and TMA payload bridge."""
 
     comparison_date: str = Field(..., description="YYYY-MM-DD")
+    updated_at: Optional[str] = Field(default=None, description="Schedule update timestamp")
     is_emergency: bool = Field(default=False)
     emergency_message: Optional[str] = Field(default=None)
     stale: bool = Field(default=False)

@@ -78,6 +78,7 @@
             ДТЕК Графік
             <span id="date-badge" class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">2026-11-11</span>
           </h1>
+          <p id="updated-badge" class="text-[11px] text-slate-400 hidden"></p>
         </div>
       </div>
       <button id="btn-settings-toggle" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-1 text-xs">
@@ -452,6 +453,7 @@
         },
         hasSlotB: true,
         showJoint: false,
+        updatedAt: null,
         timeline: [],
         metrics: {
           bothOnHours: 0,
@@ -676,6 +678,7 @@
           if (hoursDict) {
             return {
               date: data.date || appState.comparisonDate,
+              updatedAt: data.fact.update || data.lastUpdated || null,
               isEmergency,
               stale: false,
               sched: normalizeHoursDict(hoursDict, isEmergency)
@@ -795,6 +798,16 @@
         if (appState.isEmergency) emBanner.classList.remove('hidden');
         else emBanner.classList.add('hidden');
 
+        document.getElementById('date-badge').textContent = appState.comparisonDate;
+        const updEl = document.getElementById('updated-badge');
+        if (updEl) {
+          if (appState.updatedAt) {
+            updEl.textContent = `Оновлено: ${appState.updatedAt}`;
+            updEl.classList.remove('hidden');
+          } else {
+            updEl.classList.add('hidden');
+          }
+        }
         const staleBanner = document.getElementById('stale-banner');
         if (appState.stale) staleBanner.classList.remove('hidden');
         else staleBanner.classList.add('hidden');
@@ -1289,6 +1302,9 @@
             appState.comparisonDate = payload.d || payload.date || payload.comparison_date || appState.comparisonDate;
             appState.isEmergency = Boolean(payload.e || payload.is_emergency);
             appState.stale = Boolean(payload.s || payload.stale);
+            if (payload.u_at) {
+              appState.updatedAt = payload.u_at;
+            }
             if (payload.j !== undefined) {
               appState.showJoint = Boolean(payload.j);
             }
@@ -1381,6 +1397,7 @@
             const dataA = await fetchMirrorSchedule(appState.slotA.region, appState.slotA.subgroup);
             appState.slotA.sched = dataA.sched;
             appState.comparisonDate = dataA.date;
+            if (dataA.updatedAt) appState.updatedAt = dataA.updatedAt;
             appState.isEmergency = dataA.isEmergency;
 
             if (appState.hasSlotB) {

@@ -232,6 +232,10 @@ def render_timeline_png(timeline_data: Any, show_joint: bool = True, **kwargs: A
         sub_header += f"  │  Слот 2: {alias_b}"
     draw.text((35, 68), sub_header, fill=(148, 163, 184, 255), font=font_subtitle)
 
+    updated_at = _extract_timeline_field(timeline_data, "updated_at")
+    if updated_at:
+        draw.text((35, 94), f"Оновлено: {updated_at}", fill=(100, 116, 139, 255), font=font_label)
+
     # Status badge (top right)
     if is_emergency:
         badge_text = "🚨 АВАРІЙНИЙ СТАН"

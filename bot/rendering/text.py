@@ -72,7 +72,7 @@ def _get_joint_badge(
         "BOTH_ON": "🟢Всюди",
         "GROUP1_ONLY": f"🔵{a_short}",
         "GROUP2_ONLY": f"🟣{b_short}",
-        "BOTH_OFF": "⬛Темно",
+        "BOTH_OFF": "Відключення" if alias_limit <= 4 else "⬛Відключення",
         "GROUP1_ON_GROUP2_MAYBE": "🟢Є/Мож",
         "GROUP1_MAYBE_GROUP2_ON": "🟣Мож/Є",
         "GROUP1_OFF_GROUP2_MAYBE": "⬛Ні/Мож",
@@ -135,7 +135,10 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
     raw_timeline = _extract_field(timeline_data, "timeline") or []
 
     # Title with variation selector matching test_cross_feature contract
+    updated_at = _extract_field(timeline_data, "updated_at")
     lines.append(f"⚡️ ДТЕК: {comp_date}")
+    if updated_at:
+        lines.append(f"🕒 Оновл.: {str(updated_at)[:17]}")
     lines.append(f"🏠 {subgrp_a or '1'}: {alias_a[:18]}")
     if not single_mode:
         lines.append(f"🏢 {subgrp_b or '2'}: {alias_b[:18]}")
@@ -149,15 +152,15 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
 
     # 2. Table Column Headers
     if single_mode:
-        lines.append("ЧАС   │ СТАН")
-        lines.append("──────┼─────")
+        lines.append("ЧАС         │ СТАН")
+        lines.append("────────────┼─────")
     else:
-        hdr_a = (alias_a[:3] if alias_a else "СЛ1").upper().center(3)
-        hdr_b = (alias_b[:3] if alias_b else "СЛ2").upper().center(3)
-        lines.append(f"ЧАС   │{hdr_a}│{hdr_b}│СТАН")
-        lines.append("──────┼───┼───┼─────")
+        hdr_a = (subgrp_a[:3] if subgrp_a else alias_a[:3] or "СЛ1").center(3)
+        hdr_b = (subgrp_b[:3] if subgrp_b else alias_b[:3] or "СЛ2").center(3)
+        lines.append(f"ЧАС        │{hdr_a}│{hdr_b}│СТАН")
+        lines.append("───────────┼───┼───┼─────")
 
-    # 3. Contiguous Time Window Aggregation
+    # 3. Contiguous Time Window Aggregation (30-min precision HH:MM-HH:MM)
     i = 0
     total_slots = len(raw_timeline)
     while i < total_slots:
@@ -167,8 +170,7 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
         sb = _extract_str(_extract_field(item_i, "status_b", "MAYBE")) if not single_mode else None
 
         raw_start = _extract_field(item_i, "start_time")
-        start_t_str = str(raw_start) if raw_start else f"{i//2:02d}:{(i%2)*30:02d}"
-        chunk_start = start_t_str[:2]
+        chunk_start = str(raw_start)[:5] if raw_start else f"{i//2:02d}:{(i%2)*30:02d}"
 
         j = i
         while j < total_slots:
@@ -185,27 +187,21 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
         last_item = raw_timeline[j - 1]
         raw_end = _extract_field(last_item, "end_time")
         if j >= total_slots:
-            chunk_end = "24"
+            chunk_end = "24:00"
         elif raw_end:
-            chunk_end = str(raw_end)[:2]
+            chunk_end = str(raw_end)[:5]
         else:
-            chunk_end = f"{j//2:02d}"
-
-        if chunk_start == chunk_end:
-            if chunk_start.isdigit():
-                chunk_end = f"{int(chunk_start) + 1:02d}"
-            else:
-                chunk_end = f"{min(24, (i//2) + 1):02d}"
+            chunk_end = f"{j//2:02d}:{(j%2)*30:02d}"
 
         time_range = f"{chunk_start}-{chunk_end}"
         badge = _get_joint_badge(joint_state, alias_a, alias_b, single_mode)
 
         if single_mode:
-            row = f"{time_range:5s} │ {badge}"
+            row = f"{time_range:11s} │ {badge}"
         else:
             ea = EMOJI_SLOT_MAP.get(sa, "⬜")
             eb = EMOJI_SLOT_MAP.get(sb, "⬜") if sb else "⬜"
-            row = f"{time_range:5s} │ {ea}│ {eb}│{badge}"
+            row = f"{time_range:11s}│{ea}│{eb}│{badge}"
 
         lines.append(row)
         i = j

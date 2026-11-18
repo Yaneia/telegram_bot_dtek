@@ -300,6 +300,8 @@ def _extract_slots_list(payload: Any) -> Tuple[List[str], Dict[str, Any]]:
         metadata["region_name"] = payload.get("region_name")
         if payload.get("date"):
             metadata["date"] = payload.get("date")
+        if payload.get("updated_at"):
+            metadata["updated_at"] = payload.get("updated_at")
         if payload.get("is_stale") is not None or payload.get("stale") is not None:
             metadata["stale"] = bool(payload.get("is_stale") or payload.get("stale"))
         raw_items = payload.get("slots") or payload.get("intervals")
@@ -316,6 +318,8 @@ def _extract_slots_list(payload: Any) -> Tuple[List[str], Dict[str, Any]]:
         metadata["region"] = getattr(payload, "region", None)
         if getattr(payload, "date", None):
             metadata["date"] = getattr(payload, "date")
+        if getattr(payload, "updated_at", None):
+            metadata["updated_at"] = getattr(payload, "updated_at")
         if getattr(payload, "is_stale", None) is not None:
             metadata["stale"] = getattr(payload, "is_stale")
         payload = getattr(payload, "intervals")
@@ -324,6 +328,8 @@ def _extract_slots_list(payload: Any) -> Tuple[List[str], Dict[str, Any]]:
         metadata["region_name"] = getattr(payload, "region_name", None)
         if getattr(payload, "date", None):
             metadata["date"] = getattr(payload, "date")
+        if getattr(payload, "updated_at", None):
+            metadata["updated_at"] = getattr(payload, "updated_at")
         if getattr(payload, "stale", None) is not None:
             metadata["stale"] = getattr(payload, "stale")
         groups = getattr(payload, "groups", {})
@@ -629,8 +635,21 @@ class ComparisonEngine:
             or (bool(meta_b.get("stale")) if not single_mode else False)
         )
 
+        raw_updated = meta_a.get("updated_at") or (meta_b.get("updated_at") if not single_mode else None)
+        formatted_updated: Optional[str] = None
+        if raw_updated:
+            raw_u_str = str(raw_updated).strip()
+            try:
+                dt_u = datetime.fromisoformat(raw_u_str.replace("Z", "+00:00"))
+                if dt_u.tzinfo is not None:
+                    dt_u = dt_u.astimezone(KYIV_TZ)
+                formatted_updated = dt_u.strftime("%d.%m.%Y %H:%M")
+            except Exception:
+                formatted_updated = raw_u_str
+
         return TimelineResponse(
             comparison_date=comp_date,
+            updated_at=formatted_updated,
             is_emergency=forced_emergency,
             emergency_message="Аварійні відключення за розпорядженням Укренерго!" if forced_emergency else None,
             stale=is_stale_flag,
