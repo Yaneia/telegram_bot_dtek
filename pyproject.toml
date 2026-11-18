@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dtek_bot"
-version = "0.1.0"
+version = "1.0.0"
 description = "Ukrainian Electricity Outage Tracker (DTEK) Telegram Bot & TMA"
 authors = [{ name = "Artem Yaneia", email = "artem@yaneia.me" }]
 maintainers = [{ name = "Artem Yaneia", email = "artem@yaneia.me" }]
