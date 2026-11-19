@@ -80,6 +80,13 @@ if _PYDANTIC_SETTINGS_AVAILABLE:
         # Compatibility aliases
         RATE_LIMIT_RPS: float = 25.0
         TIMEZONE: str = "Europe/Kyiv"
+
+        # GitHub Actions workflow_dispatch cron trigger
+        GITHUB_TOKEN: str = ""
+        GITHUB_REPO: str = "Yaneia/telegram_bot_dtek"
+        GITHUB_SCRAPE_WORKFLOW: str = "scrape.yml"
+        GITHUB_SCRAPE_REF: str = "main"
+        GITHUB_SCRAPE_INTERVAL_SECONDS: int = 900
 else:
     class Settings(_BaseSettingsCompat):  # type: ignore[misc]
         BOT_TOKEN: str = ""
@@ -99,6 +106,13 @@ else:
         # Compatibility aliases
         RATE_LIMIT_RPS: float = 25.0
         TIMEZONE: str = "Europe/Kyiv"
+
+        # GitHub Actions workflow_dispatch cron trigger
+        GITHUB_TOKEN: str = ""
+        GITHUB_REPO: str = "Yaneia/telegram_bot_dtek"
+        GITHUB_SCRAPE_WORKFLOW: str = "scrape.yml"
+        GITHUB_SCRAPE_REF: str = "main"
+        GITHUB_SCRAPE_INTERVAL_SECONDS: int = 900
 
 
 @lru_cache(maxsize=1)

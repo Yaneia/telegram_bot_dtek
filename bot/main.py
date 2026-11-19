@@ -23,6 +23,7 @@ from bot.database.connection import DatabaseConnectionManager
 from bot.database.repository import DatabaseRepository
 from bot.database.schema import init_db
 from bot.handlers import setup_routers
+from bot.services.github_trigger import GitHubWorkflowTrigger
 from bot.services.notifier import NotifierService
 from bot.services.scraper import ScraperCascade
 
@@ -102,6 +103,7 @@ class BotApplication:
         self.db_repo: Optional[DatabaseRepository] = None
         self.scraper: Optional[ScraperCascade] = None
         self.notifier: Optional[NotifierService] = None
+        self.github_trigger: Optional[GitHubWorkflowTrigger] = None
         self.bot: Optional[Bot] = None
         self.dp: Optional[Dispatcher] = None
         self.heartbeat_task: Optional[asyncio.Task] = None
@@ -145,6 +147,13 @@ class BotApplication:
             check_interval=self.settings.NOTIFICATION_CHECK_INTERVAL_SECONDS,
             scrape_interval=self.settings.SCRAPE_INTERVAL_SECONDS,
         )
+        self.github_trigger = GitHubWorkflowTrigger(
+            token=self.settings.GITHUB_TOKEN,
+            repo=self.settings.GITHUB_REPO,
+            workflow=self.settings.GITHUB_SCRAPE_WORKFLOW,
+            ref=self.settings.GITHUB_SCRAPE_REF,
+            interval_seconds=self.settings.GITHUB_SCRAPE_INTERVAL_SECONDS,
+        )
 
         # Write initial heartbeat
         touch_heartbeat(self.settings.HEARTBEAT_PATH)
@@ -159,6 +168,8 @@ class BotApplication:
         )
         if self.notifier is not None:
             await self.notifier.start()
+        if self.github_trigger is not None:
+            await self.github_trigger.start()
 
         logger.info(
             "Starting Telegram bot '%s' with outbound long-polling (zero open ports)...",
@@ -190,6 +201,8 @@ class BotApplication:
 
         if self.notifier is not None:
             await self.notifier.stop()
+        if self.github_trigger is not None:
+            await self.github_trigger.stop()
 
         if self.heartbeat_task and not self.heartbeat_task.done():
             self.heartbeat_task.cancel()
