@@ -74,6 +74,19 @@ CREATE TABLE IF NOT EXISTS notification_history (
 -- Notification deduplication index to prevent duplicate alerts
 CREATE INDEX IF NOT EXISTS idx_notif_dedup 
 ON notification_history(user_id, slot_number, event_type, target_time);
+
+-- 6. Usage analytics events (lightweight telemetry for admin bot)
+CREATE TABLE IF NOT EXISTS usage_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    event_type TEXT NOT NULL,   -- 'command', 'callback', 'webapp'
+    action TEXT NOT NULL,       -- e.g. '/start', '/status', 'tma_sync', 'cb:refresh_schedule', 'webapp_data'
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_events_time ON usage_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_usage_events_action ON usage_events(action, created_at);
+CREATE INDEX IF NOT EXISTS idx_usage_events_user ON usage_events(user_id, created_at);
 """
 
 EXPECTED_TABLES: Set[str] = {
@@ -82,11 +95,15 @@ EXPECTED_TABLES: Set[str] = {
     "notification_settings",
     "schedule_cache",
     "notification_history",
+    "usage_events",
 }
 
 EXPECTED_INDEXES: Set[str] = {
     "idx_user_slots_lookup",
     "idx_notif_dedup",
+    "idx_usage_events_time",
+    "idx_usage_events_action",
+    "idx_usage_events_user",
 }
 
 

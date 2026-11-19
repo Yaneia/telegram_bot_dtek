@@ -449,6 +449,18 @@ CREATE TABLE IF NOT EXISTS notification_history (
 
 CREATE INDEX IF NOT EXISTS idx_notif_dedup 
 ON notification_history(user_id, slot_number, event_type, target_time);
+
+CREATE TABLE IF NOT EXISTS usage_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    action TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_events_time ON usage_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_usage_events_action ON usage_events(action, created_at);
+CREATE INDEX IF NOT EXISTS idx_usage_events_user ON usage_events(user_id, created_at);
 """
 
 

@@ -86,9 +86,23 @@ class TestDatabaseTier1(unittest.TestCase):
             "notification_settings",
             "schedule_cache",
             "notification_history",
+            "usage_events",
         }
         missing_tables = expected_tables - existing_tables
         self.assertFalse(missing_tables, f"Missing required database tables: {missing_tables}")
+
+    def test_expected_indexes_created(self) -> None:
+        cursor = self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%';"
+        )
+        existing_indexes = {row[0] for row in cursor.fetchall()}
+        expected_indexes = {
+            "idx_usage_events_time",
+            "idx_usage_events_action",
+            "idx_usage_events_user",
+        }
+        missing_indexes = expected_indexes - existing_indexes
+        self.assertFalse(missing_indexes, f"Missing required database indexes: {missing_indexes}")
 
     def test_foreign_key_user_slots_cascade_delete(self) -> None:
         """
@@ -844,6 +858,89 @@ class TestDatabaseTier3AsyncRepository(unittest.IsolatedAsyncioTestCase):
             target_time=target_time,
         )
         self.assertTrue(has_sent)
+
+    async def test_usage_events_logging_and_pruning(self) -> None:
+        """Verify log_usage_event inserts row, updates users.updated_at, and prunes >30d rows."""
+        await self.repo.users.upsert_user(user_id=5005, chat_id=5005, first_name="Олена")
+
+        # Set updated_at into the past to verify log_usage_event touches it
+        async with self.repo.cm.get_connection() as conn:
+            await conn.execute(
+                "UPDATE users SET updated_at = datetime('now', '-5 days') WHERE user_id = ?",
+                (5005,),
+            )
+            await conn.commit()
+
+        await self.repo.log_usage_event(user_id=5005, event_type="command", action="/status")
+
+        async with self.repo.cm.get_connection() as conn:
+            cur = await conn.execute(
+                "SELECT user_id, event_type, action FROM usage_events WHERE user_id = ?",
+                (5005,),
+            )
+            rows = await cur.fetchall()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(tuple(rows[0]), (5005, "command", "/status"))
+
+            cur = await conn.execute(
+                "SELECT updated_at >= datetime('now', '-1 minute') FROM users WHERE user_id = ?",
+                (5005,),
+            )
+            touched_row = await cur.fetchone()
+            self.assertIsNotNone(touched_row)
+            self.assertEqual(touched_row[0], 1)
+
+            # Insert an expired (>30 days) event and verify prune_old_events removes only it
+            await conn.execute(
+                "INSERT INTO usage_events (user_id, event_type, action, created_at) "
+                "VALUES (?, ?, ?, datetime('now', '-31 days'))",
+                (5005, "callback", "cb:refresh"),
+            )
+            await conn.commit()
+
+        deleted = await self.repo.usage.prune_old_events(days=30)
+        self.assertEqual(deleted, 1)
+
+        async with self.repo.cm.get_connection() as conn:
+            cur = await conn.execute("SELECT action FROM usage_events WHERE user_id = ?", (5005,))
+            remaining = [r[0] for r in await cur.fetchall()]
+            self.assertEqual(remaining, ["/status"])
+
+    async def test_usage_tracking_middleware_and_classification(self) -> None:
+        """Verify UsageTrackingMiddleware classifies events and never blocks on DB errors."""
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from bot.handlers.middleware import UsageTrackingMiddleware, classify_usage_event
+
+        user = SimpleNamespace(id=6001, username="tester", first_name="Test")
+        chat = SimpleNamespace(id=6001, type="private")
+
+        cmd_msg = SimpleNamespace(from_user=user, chat=chat, text="/Status@MyBot arg", web_app_data=None)
+        sync_msg = SimpleNamespace(from_user=user, chat=chat, text="/start sync_abc123", web_app_data=None)
+        webapp_msg = SimpleNamespace(from_user=user, chat=chat, text=None, web_app_data=SimpleNamespace(data="{}"))
+        plain_msg = SimpleNamespace(from_user=user, chat=chat, text="hello", web_app_data=None)
+        cb_event = SimpleNamespace(from_user=user, message=SimpleNamespace(chat=chat), data="refresh:slot1")
+
+        self.assertEqual(classify_usage_event(cmd_msg), (6001, "command", "/status"))
+        self.assertEqual(classify_usage_event(sync_msg), (6001, "webapp", "tma_sync"))
+        self.assertEqual(classify_usage_event(webapp_msg), (6001, "webapp", "webapp_data"))
+        self.assertIsNone(classify_usage_event(plain_msg))
+        self.assertEqual(classify_usage_event(cb_event), (6001, "callback", "cb:refresh"))
+
+        middleware = UsageTrackingMiddleware()
+        handler = AsyncMock(return_value="ok")
+
+        result = await middleware(handler, cmd_msg, {"db": self.repo})
+        self.assertEqual(result, "ok")
+        handler.assert_awaited_once_with(cmd_msg, {"db": self.repo})
+
+        # Non-blocking on DB failure
+        broken_db = SimpleNamespace(log_usage_event=AsyncMock(side_effect=RuntimeError("db locked")))
+        handler2 = AsyncMock(return_value="still_ok")
+        result2 = await middleware(handler2, cb_event, {"db": broken_db})
+        self.assertEqual(result2, "still_ok")
+        handler2.assert_awaited_once()
 
 
 if __name__ == "__main__":

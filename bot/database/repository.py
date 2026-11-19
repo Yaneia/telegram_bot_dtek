@@ -706,6 +706,68 @@ class NotificationHistoryRepository:
         return await self.is_notification_sent(user_id, slot_number, event_type, target_time, conn=conn)
 
 
+class UsageEventsRepository:
+    """Async repository for lightweight usage telemetry and 30-day retention pruning."""
+
+    PRUNE_EVERY_N_WRITES = 100
+
+    def __init__(self, connection_manager: DatabaseConnectionManager) -> None:
+        self.cm = connection_manager
+        self._write_count = 0
+
+    async def log_usage_event(
+        self,
+        user_id: int,
+        event_type: str,
+        action: str,
+        conn: Optional[Union[aiosqlite.Connection, Any]] = None,
+    ) -> None:
+        """Record a user interaction event, touch users.updated_at, and periodically prune >30d rows."""
+        self._write_count += 1
+        should_prune = (self._write_count % self.PRUNE_EVERY_N_WRITES) == 0
+
+        insert_sql = """
+        INSERT INTO usage_events (user_id, event_type, action)
+        VALUES (?, ?, ?);
+        """
+        touch_sql = """
+        UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE user_id = ?;
+        """
+        prune_sql = """
+        DELETE FROM usage_events WHERE created_at < datetime('now', '-30 days');
+        """
+
+        async def _run(c: Any) -> None:
+            await c.execute(insert_sql, (user_id, event_type, action))
+            await c.execute(touch_sql, (user_id,))
+            if should_prune:
+                await c.execute(prune_sql)
+            await c.commit()
+
+        if conn is not None:
+            await _run(conn)
+        else:
+            async with self.cm.get_connection() as active_conn:
+                await _run(active_conn)
+
+    async def prune_old_events(
+        self,
+        days: int = 30,
+        conn: Optional[Union[aiosqlite.Connection, Any]] = None,
+    ) -> int:
+        """Delete usage events older than `days` days and return deleted row count."""
+        sql = "DELETE FROM usage_events WHERE created_at < datetime('now', ?);"
+        param = (f"-{int(days)} days",)
+        if conn is not None:
+            cur = await conn.execute(sql, param)
+            await conn.commit()
+            return int(cur.rowcount or 0)
+        async with self.cm.get_connection() as active_conn:
+            cur = await active_conn.execute(sql, param)
+            await active_conn.commit()
+            return int(cur.rowcount or 0)
+
+
 class DatabaseRepository:
     """Unified repository facade providing access to all storage entities."""
 
@@ -716,6 +778,17 @@ class DatabaseRepository:
         self.settings = NotificationSettingsRepository(connection_manager)
         self.cache = ScheduleCacheRepository(connection_manager)
         self.history = NotificationHistoryRepository(connection_manager)
+        self.usage = UsageEventsRepository(connection_manager)
+
+    async def log_usage_event(
+        self,
+        user_id: int,
+        event_type: str,
+        action: str,
+        conn: Optional[Union[aiosqlite.Connection, Any]] = None,
+    ) -> None:
+        """Convenience facade for logging usage events."""
+        await self.usage.log_usage_event(user_id=user_id, event_type=event_type, action=action, conn=conn)
 
     async def init_schema(self) -> None:
         async with self.cm.get_connection() as conn:
