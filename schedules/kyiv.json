@@ -1,7 +1,7 @@
 {
   "regionId": "kyiv",
   "regionAffiliation": "м. Київ",
-  "lastUpdated": "2026-11-20T18:35:30.867Z",
+  "lastUpdated": "2026-11-20T18:50:23.738Z",
   "fact": {
     "data": {
       "1795125600": {
@@ -15555,7 +15555,7 @@
   "lastUpdateStatus": {
     "status": "parsed",
     "ok": true,
-    "at": "2026-11-20T18:35:30.867Z",
+    "at": "2026-11-20T18:50:23.738Z",
     "attempt": 1
   }
 }
