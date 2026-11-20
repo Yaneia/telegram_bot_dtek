@@ -1,7 +1,7 @@
 {
   "regionId": "odesa",
   "regionAffiliation": "Одеська обл.",
-  "lastUpdated": "2026-11-20T08:19:31.615Z",
+  "lastUpdated": "2026-11-20T08:49:25.930Z",
   "fact": {
     "data": {
       "1795125600": {
@@ -18,10 +18,10 @@
           "10": "second",
           "11": "no",
           "12": "no",
-          "13": "yes",
-          "14": "yes",
-          "15": "yes",
-          "16": "yes",
+          "13": "no",
+          "14": "no",
+          "15": "no",
+          "16": "first",
           "17": "yes",
           "18": "yes",
           "19": "second",
@@ -44,10 +44,10 @@
           "10": "second",
           "11": "no",
           "12": "no",
-          "13": "yes",
-          "14": "yes",
-          "15": "yes",
-          "16": "yes",
+          "13": "no",
+          "14": "no",
+          "15": "no",
+          "16": "first",
           "17": "yes",
           "18": "yes",
           "19": "second",
@@ -224,8 +224,8 @@
           "8": "second",
           "9": "no",
           "10": "no",
-          "11": "yes",
-          "12": "yes",
+          "11": "no",
+          "12": "no",
           "13": "yes",
           "14": "yes",
           "15": "yes",
@@ -250,8 +250,8 @@
           "8": "second",
           "9": "no",
           "10": "no",
-          "11": "yes",
-          "12": "yes",
+          "11": "no",
+          "12": "no",
           "13": "yes",
           "14": "yes",
           "15": "yes",
@@ -319,7 +319,7 @@
         }
       }
     },
-    "update": "20.11.2026 09:56",
+    "update": "20.11.2026 10:22",
     "today": 1795125600
   },
   "preset": {
@@ -2696,12 +2696,12 @@
         }
       }
     },
-    "updateFact": "20.11.2026 09:56"
+    "updateFact": "20.11.2026 10:22"
   },
   "lastUpdateStatus": {
-    "status": "error",
-    "ok": false,
-    "message": "No DisconSchedule found in HTML (837 bytes)",
-    "at": "2026-11-20T08:34:19.177Z"
+    "status": "parsed",
+    "ok": true,
+    "at": "2026-11-20T08:49:25.930Z",
+    "attempt": 2
   }
 }
