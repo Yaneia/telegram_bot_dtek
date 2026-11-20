@@ -2699,9 +2699,9 @@
     "updateFact": "20.11.2026 09:56"
   },
   "lastUpdateStatus": {
-    "status": "parsed",
-    "ok": true,
-    "at": "2026-11-20T08:19:31.615Z",
-    "attempt": 1
+    "status": "error",
+    "ok": false,
+    "message": "No DisconSchedule found in HTML (837 bytes)",
+    "at": "2026-11-20T08:34:19.177Z"
   }
 }
