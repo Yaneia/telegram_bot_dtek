@@ -1,7 +1,7 @@
 {
   "regionId": "odesa",
   "regionAffiliation": "Одеська обл.",
-  "lastUpdated": "2026-11-21T03:21:40.408Z",
+  "lastUpdated": "2026-11-21T03:36:48.445Z",
   "fact": {
     "data": {
       "1795212000": {
@@ -2701,7 +2701,7 @@
   "lastUpdateStatus": {
     "status": "parsed",
     "ok": true,
-    "at": "2026-11-21T03:21:40.408Z",
-    "attempt": 2
+    "at": "2026-11-21T03:36:48.445Z",
+    "attempt": 1
   }
 }
