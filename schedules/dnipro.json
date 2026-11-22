@@ -1,7 +1,7 @@
 {
   "regionId": "dnipro",
   "regionAffiliation": "Дніпропетровська обл.",
-  "lastUpdated": "2026-11-22T06:24:26.703Z",
+  "lastUpdated": "2026-11-22T06:39:41.641Z",
   "fact": {
     "data": {
       "1795298400": {
@@ -4921,7 +4921,7 @@
   "lastUpdateStatus": {
     "status": "parsed",
     "ok": true,
-    "at": "2026-11-22T06:24:26.703Z",
+    "at": "2026-11-22T06:39:41.641Z",
     "attempt": 1
   }
 }
