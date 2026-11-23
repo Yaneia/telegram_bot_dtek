@@ -84,8 +84,8 @@ def _get_joint_badge(
 
 
 def _pad_emoji_cell(emoji: str, col_width: int) -> str:
-    """Center a 2-column-wide emoji inside a col_width monospace cell."""
-    pad_total = max(0, col_width - 2)
+    """Center a 3-column-wide emoji (Telegram monospace) inside a col_width cell."""
+    pad_total = max(0, col_width - 3)
     left = pad_total // 2
     right = pad_total - left
     return f"{' ' * left}{emoji}{' ' * right}"
@@ -170,8 +170,8 @@ def render_timeline_text(timeline_data: Any, show_joint: bool = True, **kwargs: 
             hdr_b = name_b[: max(1, 11 - len(hdr_a))]
         else:
             hdr_a, hdr_b = name_a, name_b
-        col_w_a = max(2, len(hdr_a))
-        col_w_b = max(2, len(hdr_b))
+        col_w_a = max(3, len(hdr_a))
+        col_w_b = max(3, len(hdr_b))
         hdr_a = hdr_a.center(col_w_a)
         hdr_b = hdr_b.center(col_w_b)
         lines.append(f"ЧАС         │ {hdr_a} │ {hdr_b}")
