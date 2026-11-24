@@ -1,7 +1,7 @@
 {
   "regionId": "kyiv-region",
   "regionAffiliation": "Київська обл.",
-  "lastUpdated": "2026-11-24T17:39:24.251Z",
+  "lastUpdated": "2026-11-24T18:09:11.874Z",
   "fact": {
     "data": {
       "1795471200": {
@@ -2699,9 +2699,9 @@
     "updateFact": "24.11.2026 19:06"
   },
   "lastUpdateStatus": {
-    "status": "error",
-    "ok": false,
-    "message": "No DisconSchedule found in HTML (835 bytes)",
-    "at": "2026-11-24T17:54:08.617Z"
+    "status": "parsed",
+    "ok": true,
+    "at": "2026-11-24T18:09:11.874Z",
+    "attempt": 1
   }
 }
