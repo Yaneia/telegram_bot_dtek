@@ -1,7 +1,7 @@
 {
   "regionId": "odesa",
   "regionAffiliation": "Одеська обл.",
-  "lastUpdated": "2026-11-26T19:15:14.803Z",
+  "lastUpdated": "2026-11-26T19:30:14.461Z",
   "fact": {
     "data": {
       "1795644000": {
@@ -79,8 +79,8 @@
           "19": "yes",
           "20": "yes",
           "21": "yes",
-          "22": "second",
-          "23": "first",
+          "22": "yes",
+          "23": "yes",
           "24": "yes"
         },
         "GPV2.2": {
@@ -319,7 +319,7 @@
         }
       }
     },
-    "update": "26.11.2026 18:26",
+    "update": "26.11.2026 21:26",
     "today": 1795644000
   },
   "preset": {
@@ -2696,12 +2696,12 @@
         }
       }
     },
-    "updateFact": "26.11.2026 18:26"
+    "updateFact": "26.11.2026 21:26"
   },
   "lastUpdateStatus": {
     "status": "parsed",
     "ok": true,
-    "at": "2026-11-26T19:15:14.803Z",
+    "at": "2026-11-26T19:30:14.461Z",
     "attempt": 1
   }
 }
