@@ -1,7 +1,7 @@
 {
   "regionId": "kyiv-region",
   "regionAffiliation": "Київська обл.",
-  "lastUpdated": "2026-11-27T20:43:57.516Z",
+  "lastUpdated": "2026-11-27T20:58:57.922Z",
   "fact": {
     "data": {
       "1795730400": {
@@ -3015,7 +3015,7 @@
   "lastUpdateStatus": {
     "status": "parsed",
     "ok": true,
-    "at": "2026-11-27T20:43:57.516Z",
-    "attempt": 1
+    "at": "2026-11-27T20:58:57.922Z",
+    "attempt": 2
   }
 }
